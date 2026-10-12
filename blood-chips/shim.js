@@ -26,7 +26,12 @@
       if (method !== "GET") { return Promise.resolve(errResponse(MSG)); }
       return origFetch(DATA_BASE + MAP[path], { cache: "no-store" }).then(function (r) {
         if (!r.ok) { throw new Error("静态数据读取失败（HTTP " + r.status + "）"); }
-        return r;
+        return r.text().then(function (t) {
+          return new Response(t, {
+            status: 200,
+            headers: { "content-type": "application/json; charset=utf-8" }
+          });
+        });
       });
     }
     if (path.indexOf("/api/") === 0) { return Promise.resolve(errResponse(MSG)); }

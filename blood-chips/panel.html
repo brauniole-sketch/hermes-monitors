@@ -1,0 +1,2380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- 页面构建号：服务端把 __BUILD__ 替换成本次启动算出来的值（改代码后面板会自己刷新，
+     用户不用手动硬刷新）。JS 通过 meta[name=bc-build] 读它，和 /api/brief 的 build 比对。 -->
+<meta name="bc-build" content="__BUILD__">
+<title>带血筹码 · 监测面板</title>
+<style>
+:root{
+  --bg:#0b0d10; --panel:#13171c; --panel2:#181d24; --line:#242c35;
+  --fg:#d7dee7; --muted:#7f8b99; --dim:#5b6673;
+  --green:#2fbf71; --yellow:#d8b13a; --gray:#6f7a86;
+  --accent:#3b82f6; --red:#f0555a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--fg)}
+body{
+  font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  padding-bottom:8px;
+}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-variant-numeric:tabular-nums}
+a{color:var(--accent)}
+
+/* ---------- 顶栏 ---------- */
+.top{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:8px 12px;background:rgba(11,13,16,.96);border-bottom:1px solid var(--line);
+  backdrop-filter:saturate(140%) blur(6px);
+}
+.brand{font-size:15px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.muted{color:var(--muted);font-size:12px}
+.dim{color:var(--dim)}
+button#btn{
+  font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;
+  color:#dbe4ee;background:var(--panel2);border:1px solid var(--line);
+}
+button#btn:hover:not(:disabled){border-color:#39485a;background:#1d232b}
+button#btn:disabled{opacity:.55;cursor:default}
+.err{color:var(--red);font-size:12px;font-weight:600;display:none}
+.err.on{display:inline}
+.chip{
+  font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid var(--line);
+  color:var(--muted);background:#101418;white-space:nowrap;
+}
+.chip.bad{color:var(--yellow);border-color:#3a3116;background:#1d1a0e}
+.meta-row{
+  display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+  padding:6px 12px;border-bottom:1px solid #1a1f26;background:#0e1114;
+}
+
+/* ---------- 卡片 ---------- */
+main{padding:10px 12px 0}
+.cards{display:flex;flex-wrap:wrap;gap:8px}
+.card{
+  flex:1 1 158px;min-width:150px;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px;padding:8px 10px;
+}
+.card .lbl{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .v{font-size:22px;font-weight:700;margin-top:2px;letter-spacing:.2px}
+.card .sub{font-size:11px;color:var(--dim);margin-top:3px}
+.card.key{background:linear-gradient(180deg,#161c23,#12161b);border-color:#2b3644}
+.card.key .v{font-size:31px}
+.card.key .lbl{color:#93a1b1}
+.pos{color:var(--green)}
+.neg{color:#e0645f}
+.flat{color:var(--muted)}
+
+/* ---------- 面板 ---------- */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:10px}
+.panel > h2{
+  margin:0 0 7px;font-size:12.5px;font-weight:700;color:#aab6c4;letter-spacing:.4px;
+  display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+}
+.panel > h2 .note{font-size:11px;font-weight:400;color:var(--dim)}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* ---------- F&G ---------- */
+.fng-row{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.fng-big{font-size:46px;font-weight:800;line-height:1}
+.fng-lab{font-size:14px;font-weight:600;margin-bottom:5px}
+.fng-meta{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding-bottom:4px}
+.fng-meta b{color:var(--fg);font-weight:600}
+
+/* ---------- 表格 ---------- */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{
+  text-align:right;font-weight:500;color:var(--muted);padding:4px 6px;
+  border-bottom:1px solid var(--line);white-space:nowrap;
+}
+td{padding:3px 6px;text-align:right;white-space:nowrap;border-bottom:1px solid #191e24}
+tr:last-child td{border-bottom:none}
+th.l,td.l{text-align:left}
+tbody tr:hover{background:#171d24}
+tr.top3 td:first-child{box-shadow:inset 3px 0 0 0 var(--accent)}
+td.sym{font-weight:600;color:#e6edf5}
+td.dd{color:#e0645f}
+td.score{color:#e2b95c;font-weight:700}
+.badge{font-size:11px;padding:0 5px;border-radius:3px;border:1px solid #3a3116;background:#221d0f;color:var(--yellow)}
+.badge.ok{color:var(--red);border-color:#3d1f21;background:#241114}
+.badge.mine{color:var(--green);border-color:#1d3a29;background:#0f1f16}
+.badge.cand{color:var(--green);border-color:#1d3a29;background:#0f1f16}
+.note-line{font-size:11px;color:var(--dim);margin-top:5px;line-height:1.6}
+.note-line.warn{color:#b98f3e}
+.empty{color:var(--muted);font-size:12px;padding:6px 2px}
+.empty b{color:#e0c164}
+
+/* ---------- 查询 ---------- */
+/* 手机优先：输入框**独占一行、放大**，按钮单独一行；只有宽屏(≥560px)才并排。
+   font-size 用 16px 是因为 iOS Safari 对 <16px 的输入框会自动放大页面。 */
+.qtitle{font-size:14px;font-weight:600;color:#cfd8e3;margin:0 0 8px}
+.search-row{display:flex;flex-direction:column;gap:9px}
+.search-row input{
+  width:100%;box-sizing:border-box;font:inherit;font-size:16px;line-height:1.35;
+  padding:13px 14px;border-radius:10px;
+  color:var(--fg);background:#0f1317;border:1px solid var(--line);
+}
+.search-row input::placeholder{color:var(--dim);font-size:15px}
+.search-row input:focus{outline:none;border-color:#4a5d73;background:#121821}
+.search-row button{
+  width:100%;box-sizing:border-box;font:inherit;font-size:16px;font-weight:600;
+  padding:12px 14px;border-radius:10px;cursor:pointer;
+  color:#0b0f13;background:#7ddba6;border:1px solid #2c6a48;
+}
+.search-row button:hover:not(:disabled){background:#93e6b8}
+.search-row button:disabled{opacity:.55;cursor:default}
+@media(min-width:560px){
+  .search-row{flex-direction:row;align-items:stretch}
+  .search-row input{font-size:15px;padding:11px 13px}
+  .search-row button{width:auto;flex:0 0 auto;font-size:14px;padding:11px 22px}
+}
+#q-status{margin-top:6px}
+#q-status:empty{display:none}
+#q-summary{margin-top:2px}
+#q-summary:empty{display:none}
+.q-err{color:var(--red);font-weight:600}
+.q-warn{color:#b98f3e}
+
+/* ---------- 查询结果：卡片式大字（手机优先，不用横滚表格） ---------- */
+#q-list{margin-top:11px}
+.qcard{
+  border:1px solid var(--line);border-radius:12px;background:#0f141a;
+  padding:12px 13px;margin-bottom:11px;
+}
+.qcard.in-cand{border-color:#2c6a48;background:#0e1a14}
+.qhead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+.qhead .qsym{font-size:20px;font-weight:700;color:#e8eef6;letter-spacing:.3px}
+.qhead .qname{font-size:13px;color:var(--muted)}
+.qhead .qrank{margin-left:auto;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.qhead .qsrc{margin-left:auto;font-size:11px;color:#b98f3e;white-space:nowrap}
+.qbadges{display:flex;gap:6px;flex-wrap:wrap;margin:-3px 0 9px}
+.badge.chain{color:#8fb8e0;border-color:#1d3049;background:#0f1a26}   /* 地址查询：链名徽章 */
+/* 交易池块（地址查询）：价 / 流动性 / 24h量 / 24h涨跌 / 建池日期 + 源标签。
+   手机优先：两列大字，绝不做横滚表格。 */
+.qpool{margin-top:10px;padding:10px 11px;border:1px solid #1e2933;border-radius:10px;background:#121a23}
+.qpool .qp-h{font-size:13px;font-weight:600;color:#cfe0f2;margin-bottom:8px;word-break:break-word}
+.qpool .qbig .qb .v{font-size:16px}
+/* 错杀分：主角，最大的数字 */
+.qscore{
+  display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:10px;
+  background:#121a23;border:1px solid #1e2933;margin-bottom:10px;flex-wrap:wrap;
+}
+.qscore .lbl{font-size:13px;color:var(--muted)}
+.qscore .val{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.qscore .val.score{color:#e0c164}
+.qscore .val.dim{color:var(--dim)}
+.qscore .ath{margin-left:auto;font-size:14px;color:var(--muted)}
+.qscore .ath b{font-variant-numeric:tabular-nums}
+/* 数值网格：每行两项，值用大字 */
+.qbig{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+.qbig .qb{
+  display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  border-bottom:1px dashed #1b222b;padding-bottom:5px;
+}
+.qbig .qb .k{font-size:12px;color:var(--muted);white-space:nowrap}
+.qbig .qb .v{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.qsub{margin-top:9px;font-size:12px;color:var(--muted);word-break:break-word}
+.qact{margin-top:11px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.qact button{
+  font:inherit;font-size:15px;font-weight:600;padding:10px 18px;border-radius:9px;
+  cursor:pointer;border:1px solid var(--line);
+}
+.qact button.primary{color:#0b0f13;background:#7ddba6;border-color:#2c6a48}
+.qact button.danger{color:#f0938f;background:#241114;border-color:#3d1f21}
+.qact button:disabled{opacity:.55;cursor:default}
+@media(min-width:560px){
+  .qbig{grid-template-columns:repeat(4,1fr)}
+}
+tr.in-cand td:first-child{box-shadow:inset 3px 0 0 0 var(--green)}
+tr.qrow{cursor:pointer}
+tr.qrow.sel td{background:#1b2330}
+/* ---------- 结构盈亏比（只挂在第 1 条结果下面；大字 / 手机优先 / 绝不横滚） ---------- */
+.srr{
+  border:1px solid #3a3116;border-radius:12px;background:#131109;
+  padding:12px 13px;margin:0 0 11px;
+}
+.srr-h{font-size:16px;font-weight:700;color:#e8d9a6;letter-spacing:.3px}
+.srr-sub{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.6;word-break:break-word}
+.srr-row{
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 10px;
+  padding:7px 0;border-bottom:1px dashed #2a2416;
+}
+.srr-row .k{font-size:13px;color:var(--muted)}
+.srr-row .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+.srr-row .d{font-size:11.5px;color:var(--dim);margin-left:auto;text-align:right;word-break:break-word}
+.srr-four{margin-top:9px;font-size:13px;color:#dfe7f0;line-height:1.7;word-break:break-word}
+.srr-note{margin-top:3px;font-size:11.5px;color:var(--dim);line-height:1.6;word-break:break-word}
+.srr-reason{margin-top:9px;font-size:12.5px;color:#f0c9a4;line-height:1.75;word-break:break-word}
+.srr-reason .li{display:block}
+.srr-gap{margin-top:7px;font-size:11.5px;color:var(--dim);line-height:1.6;word-break:break-word}
+.srr-err{margin-top:8px;font-size:13px;color:#f0938f;font-weight:600;line-height:1.6;word-break:break-word}
+/* 限流说明：后端 meta.blocked_by 的结构化字段直接照抄（谁被限流 / 上游说多久恢复）——
+   数字只从 retry_after_s 来，前端**绝不自己编**一个秒数 */
+.srr-blocked{margin-top:7px;font-size:12px;color:#f0c9a4;line-height:1.7;word-break:break-word}
+.srr-blocked .li{display:block}
+.srr-foot{margin-top:7px;font-size:11px;color:var(--dim);line-height:1.6;word-break:break-word}
+/* ---------- 带血筹码成本分布（只挂在第 1 条卡片下方；手机优先 / flex-wrap / 绝不横滚表格） ---------- */
+.cb{border:1px solid #2b3a48;border-radius:12px;background:#0e141b;padding:12px 13px;margin:0 0 11px}
+.cb-h{font-size:15px;font-weight:700;color:#cfe3f5;letter-spacing:.3px}
+.cb-sub{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.6;word-break:break-word}
+/* 占满宽的按钮：大字，手机上一指可点 */
+.srr-btn{
+  display:block;width:100%;margin-top:10px;font:inherit;font-size:17px;font-weight:700;
+  padding:14px 16px;border-radius:11px;cursor:pointer;line-height:1.35;
+  color:#0b0f13;background:#7ddba6;border:1px solid #2c6a48;
+}
+.srr-btn:disabled{opacity:.6;cursor:default}
+.srr-btn.ghost{color:#dfe7f0;background:#141b24;border-color:var(--line)}
+.cb-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.cb-cell{flex:1 1 128px;min-width:118px;background:#121a23;border:1px solid #1e2a36;border-radius:10px;padding:9px 11px}
+.cb-cell .k{font-size:11.5px;color:var(--muted);line-height:1.5}
+.cb-cell .v{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2;word-break:break-word}
+.cb-cell .d{font-size:11px;color:var(--dim);margin-top:3px;line-height:1.5;word-break:break-word}
+/* 最大字号那一格：水下筹码占比（分母口径必须写在下面一行） */
+.cb-hero{flex:1 1 100%;background:#101a13;border:1px solid #24402c;border-radius:11px;padding:11px 12px}
+.cb-hero .k{font-size:12.5px;color:#9fb8a8}
+.cb-hero .v{font-size:34px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;word-break:break-word}
+.cb-hero .d{font-size:11.5px;color:var(--dim);margin-top:4px;line-height:1.6;word-break:break-word}
+.cb-status{margin-top:9px;font-size:13.5px;color:#dfe7f0;line-height:1.6;word-break:break-word}
+.cb-err{margin-top:9px;font-size:13.5px;color:#f0938f;font-weight:600;line-height:1.6;word-break:break-word}
+.cb-ban{margin-top:9px;font-size:13px;color:#e0c164;font-weight:600;line-height:1.6;word-break:break-word}
+.cb-ban .dim{font-weight:400}
+/* 「将要分析」大字：**起任务之前**先把解析到的是谁亮出来（币名 · 链 · 地址缩写 · 来源），
+   解析错了用户当场就能看出来（名字不对还有一行「换用合约地址查询更准」） */
+.cb-who{margin-top:10px;background:#101c26;border:1px solid #22415a;border-radius:11px;padding:10px 12px}
+.cb-who .cb-who-k{font-size:11.5px;color:#8fb6d6;letter-spacing:.4px}
+.cb-who .cb-who-v{font-size:20px;font-weight:800;line-height:1.35;color:#e6f1fb;
+  word-break:break-word;font-variant-numeric:tabular-nums}
+.cb-who .cb-who-d{font-size:11.5px;color:var(--dim);margin-top:3px;line-height:1.55;word-break:break-word}
+.cb-who .cb-who-hint{margin-top:6px;font-size:12px;color:#e0c164;line-height:1.6;word-break:break-word}
+/* 代码更新提示条：服务器 build != 页面 build → 顶部弹出，1 秒后自动刷新 */
+.buildnote{display:none;position:fixed;top:0;left:0;right:0;z-index:99;padding:9px 12px;
+  font-size:13.5px;font-weight:700;text-align:center;color:#0b0f13;background:#e0c164;
+  border-bottom:1px solid #3a3116}
+.buildnote.on{display:block}
+.cb-cav{margin-top:10px}
+.cb-cav .li{display:block;font-size:11.5px;color:var(--dim);line-height:1.65;margin-top:3px;word-break:break-word}
+.cb-foot{margin-top:8px;font-size:11px;color:var(--dim);line-height:1.6;word-break:break-word}
+.detail{margin-top:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+.detail h3{margin:0 0 7px;font-size:13px;font-weight:700;color:#e9f0f8}
+.detail .kv{display:flex;flex-wrap:wrap;gap:5px 18px}
+.detail .kv > div{font-size:12px;max-width:100%;word-break:break-word}
+.detail .k{color:var(--muted);margin-right:5px}
+.detail-actions{margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.detail-actions button{
+  font:inherit;font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer;
+  color:#dbe4ee;background:var(--panel);border:1px solid var(--line);
+}
+.detail-actions button:hover:not(:disabled){border-color:#39485a;background:#1d232b}
+.detail-actions button:disabled{opacity:.55;cursor:default}
+.detail-actions button.primary{color:#79d6a2;border-color:#1d3a29;background:#0f1f16}
+.detail-actions button.danger{color:#f0a1a4;border-color:#3d1f21;background:#241114}
+
+/* ---------- 折价区 / 深度依据 ---------- */
+.bandnote{font-size:11.5px;color:#e0c164;background:#221d0f;border:1px solid #3a3116;border-radius:6px;padding:5px 8px;line-height:1.55}
+.stale{display:none;font-size:11.5px;color:#e0c164;margin-top:5px;line-height:1.5}
+.stale.on{display:block}
+.duo{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.dcard{flex:1 1 240px;min-width:208px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.dc-lbl{font-size:11.5px;color:var(--muted);font-weight:600}
+.dc-main{display:flex;align-items:center;gap:8px;margin-top:3px;flex-wrap:wrap}
+.dc-v{font-size:27px;font-weight:800;letter-spacing:.2px}
+.dc-sub{font-size:11px;color:var(--dim);margin-top:1px}
+.dc-line{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5;word-break:break-word}
+.dc-line.warn{color:#b98f3e}
+.band{font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid var(--line);white-space:nowrap}
+.band-bl{color:#8fc4ff;border-color:#1e3550;background:#0e1a26}
+.band-gr{color:#7ddba6;border-color:#1d3a29;background:#0f1f16}
+.band-or{color:#e0a94f;border-color:#3a3116;background:#221d0f}
+.band-rd{color:#f0938f;border-color:#3d1f21;background:#241114}
+.band-gy{color:var(--muted);background:#101418}
+details.fold{margin-top:9px;border:1px solid var(--line);border-radius:8px;background:#101418}
+details.fold > summary{cursor:pointer;font-size:12px;font-weight:600;color:#aab6c4;padding:6px 9px;list-style:none}
+details.fold > summary::-webkit-details-marker{display:none}
+details.fold > summary::before{content:'▸ ';color:var(--dim)}
+details.fold[open] > summary::before{content:'▾ '}
+.fold-body{padding:0 9px 8px}
+.sub-h{font-size:11.5px;font-weight:700;color:#93a1b1;margin:11px 0 4px}
+tr.xrow{cursor:pointer}
+tr.xrow.open td{background:#1b2330}
+tr.xdet > td{background:#0f1317;white-space:normal;text-align:left}
+.det{font-size:11.5px;line-height:1.65;color:#c3cdd9}
+.det .kv{display:flex;flex-wrap:wrap;gap:4px 18px}
+.det .kv > div{max-width:100%;word-break:break-word}
+.det .k{color:var(--muted);margin-right:6px}
+.det ul{margin:3px 0 0 16px;padding:0}
+.hot{color:var(--red);font-weight:700}
+.amber{color:#e0a94f}
+.blue{color:#79b8f0}
+.hi{color:var(--red);font-weight:700}
+.pbarwrap{display:flex;align-items:center;gap:6px;justify-content:flex-end}
+.pbar{width:64px;height:6px;border-radius:3px;background:#1b2128;overflow:hidden;flex:0 0 auto}
+.pbar > i{display:block;height:100%}
+.pbar.p80 > i{background:var(--red)}
+.pbar.p60 > i{background:#d08a34}
+.pbar.p40 > i{background:#6f7a86}
+.pbar.p20 > i{background:#3b82f6}
+.pbar.pdef > i{background:#39485a}
+.t1 th:first-child,.t1 td:first-child{position:sticky;left:0;background:var(--panel);z-index:2}
+.t1 tbody tr:hover td:first-child{background:#171d24}
+.t1 tr.xdet td{background:#0f1317}
+.t1 .sym{font-weight:600;color:#e6edf5}
+.t1 .pname{color:var(--dim);font-weight:400}
+
+/* ---------- 简报 ---------- */
+.brief{max-height:340px;overflow-y:auto;background:#0f1317;border:1px solid var(--line);
+  border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.6}
+.brief .md-l{white-space:pre-wrap;word-break:break-word;min-height:1px}
+.brief .md-h{font-weight:700;color:#e9f0f8;margin:7px 0 2px;white-space:pre-wrap}
+.brief .md-h1{font-size:14px;color:#fff}
+.brief .md-h2{font-size:13px;color:#cfe0f2}
+.brief code{background:#1b2128;padding:0 3px;border-radius:3px;color:#a9c8ea}
+.brief b{color:#fff}
+
+footer{
+  margin:10px 12px 14px;padding:7px 10px;font-size:11.5px;color:#c9a24a;
+  background:#1c1809;border:1px solid #3a3116;border-radius:6px;line-height:1.6;
+}
+</style>
+</head>
+<body>
+
+<div id="buildnote" class="buildnote">面板已更新，正在刷新…</div>
+
+<header class="top">
+  <div class="brand">带血筹码 · 监测面板</div>
+  <div class="top-right">
+    <span class="err" id="err">数据读取失败</span>
+    <span class="muted">更新 <span class="mono" id="updated">—</span></span>
+    <button id="btn">重新采集</button>
+    <span class="muted" id="status">待机</span>
+  </div>
+</header>
+
+<div class="meta-row" id="files"></div>
+
+<main>
+  <section class="panel">
+    <div class="qtitle">查询代币</div>
+    <div class="search-row">
+      <input id="q-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+             placeholder="🔍 输入币名 / 代码 / 合约地址">
+      <button id="q-btn" type="button">查询</button>
+    </div>
+    <div class="note-line">支持币名 / 代码（如 pepe / sol / arb；中文也能搜，如「币安」）+
+      EVM/Solana 合约地址；地址按可达性逐个源试（GMGN search → DexScreener →
+      GeckoTerminal → CoinGecko，前一个没命中才换下一个）</div>
+    <div class="note-line" id="q-status"></div>
+    <div class="note-line" id="q-upstream"></div>
+    <!-- 结果汇总：回撤 ≥50% 占比（只统计有回撤数据的行） -->
+    <div class="note-line" id="q-summary"></div>
+    <!-- 查询结果：卡片式大字（手机优先），不用横滚表格 -->
+    <div id="q-list"></div>
+  </section>
+
+  <section class="cards">
+    <div class="card key">
+      <div class="lbl">回撤 ≥50% 占比</div>
+      <div class="v mono" id="c-b50">—</div>
+      <div class="sub" id="c-b50-sub">等权广度：多少个币在跌</div>
+    </div>
+    <div class="card key">
+      <div class="lbl">1 年为负占比</div>
+      <div class="v mono" id="c-r1">—</div>
+      <div class="sub" id="c-r1-sub">等权广度：跌势有多普遍</div>
+    </div>
+    <div class="card key">
+      <div class="lbl">市值加权回撤</div>
+      <div class="v mono" id="c-mcap">—</div>
+      <div class="sub">按市值加权：大盘实际跌了多少</div>
+    </div>
+    <div class="card">
+      <div class="lbl">中位回撤</div>
+      <div class="v mono" id="c-meddd">—</div>
+      <div class="sub">中位资产距 ATH</div>
+    </div>
+    <div class="card">
+      <div class="lbl">中位 1 年</div>
+      <div class="v mono" id="c-medr1">—</div>
+      <div class="sub">中位资产 1 年收益</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>市场情绪 <span class="note">恐慌买框架：低分才是机会（≤25 绿 / 25–45 黄 / &gt;45 灰）</span></h2>
+    <div class="fng-row">
+      <div class="fng-big mono" id="fng-v">—</div>
+      <div>
+        <div class="fng-lab" id="fng-lab">—</div>
+        <div class="fng-meta">
+          <span>近 30 条分位 <b class="mono" id="fng-pct">—</b></span>
+          <span>较上轮 <b class="mono" id="fng-chg">—</b></span>
+          <span>上轮 <b class="mono" id="fng-prev">—</b></span>
+          <span>数据时间 <b class="mono" id="fng-asof">—</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>候选池 <span class="note">系统发现 · 跌得多 + 有使用量</span>
+      <span class="note mono" id="cand-count"></span></h2>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>错杀分</th><th class="l">符号</th><th>现价</th><th>距ATH</th>
+          <th>7d</th><th>30d</th><th>1y</th><th>市值</th><th>24h量</th>
+          <th>TVL</th><th>TVL/市值</th><th class="l">类别</th>
+        </tr></thead>
+        <tbody id="cand-body"><tr><td colspan="12" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="note-line" id="cand-foot"></div>
+    <div class="note-line">错杀分 = 0.45 × 回撤深度 + 0.35 × 市值 + 0.20 × 使用度（TVL/市值，无 TVL 退回 24h量/市值）</div>
+    <div class="note-line warn">* 只为排序可用，不是买入建议</div>
+  </section>
+
+  <section class="panel">
+    <h2>观察池 <span class="note">用户自选</span></h2>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th class="l">符号</th><th>现价</th><th>距ATH</th><th>7d</th><th>30d</th><th>触发</th>
+        </tr></thead>
+        <tbody id="watch-body"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+    <div id="watch-msg"></div>
+  </section>
+
+  <section class="panel" id="sec-discount">
+    <h2>折价区 · 流动性档位 <span class="note mono" id="disc-ts">—</span></h2>
+    <div class="bandnote">主流桶=距真实ATH；meme桶=近180日高点。两个桶口径不同，不能横向比较，也不做加权平均。</div>
+    <div class="stale" id="disc-stale"></div>
+    <div class="duo">
+      <div class="dcard" id="disc-ms"><div class="empty">加载中…</div></div>
+      <div class="dcard" id="disc-meme"><div class="empty">加载中…</div></div>
+    </div>
+    <details class="fold" id="disc-ms-fold" open>
+      <summary>主流桶明细 · 距ATH回撤（降序）</summary>
+      <div class="fold-body">
+        <div class="note-line">此表已按回撤≥50%预筛，仅作明细，不用于判断档位</div>
+        <div class="scroll">
+          <table class="t1">
+            <thead><tr><th class="l">币</th><th>距ATH回撤</th></tr></thead>
+            <tbody id="disc-ms-body"><tr><td colspan="2" class="empty">加载中…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="note-line" id="disc-ms-foot"></div>
+      </div>
+    </details>
+    <details class="fold" id="disc-meme-fold" open>
+      <summary>Meme 桶明细 · 近180日回撤（口径不同于主流桶）</summary>
+      <div class="fold-body">
+        <div class="scroll">
+          <table class="t1">
+            <thead><tr>
+              <th class="l">币(池)</th><th class="l">链</th><th>现价</th><th>近180日回撤</th>
+              <th>窗口天数</th><th>距最高点天数</th><th>池龄</th><th>流动性</th><th>FDV</th>
+              <th>24h量</th><th>真实ATH回撤</th>
+            </tr></thead>
+            <tbody id="disc-meme-body"><tr><td colspan="11" class="empty">加载中…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="note-line" id="disc-meme-foot"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel" id="sec-deep">
+    <h2>深度依据 <span class="note mono" id="deep-ts">—</span></h2>
+    <div class="stale" id="deep-stale"></div>
+    <div class="sub-h">宏观</div>
+    <div class="scroll">
+      <table class="t1">
+        <thead><tr>
+          <th class="l">指标</th><th>最新</th><th>日变动</th><th>距52周高</th><th>距52周低</th><th>52周分位</th>
+        </tr></thead>
+        <tbody id="deep-macro-body"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="note-line">52周分位 = range_pos_pct（≥80 红 / 60–80 橙 / 40–60 灰 / ≤20 蓝）</div>
+    <div class="sub-h">技术面</div>
+    <div class="scroll">
+      <table class="t1">
+        <thead><tr>
+          <th class="l">币</th><th>现价</th><th class="l">均线排列</th><th>vs200DMA</th>
+          <th>RSI(日)</th><th>RSI(周)</th><th>7d</th><th>30d</th><th>90d</th><th>1y</th>
+          <th>量能变化</th><th>ATR%</th><th>距年内高</th><th>市值</th>
+        </tr></thead>
+        <tbody id="deep-tech-body"><tr><td colspan="14" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="sub-h">基本面</div>
+    <div class="note-line dim">点任意一行展开：匹配方式 + 参与合并的协议名（年化费用÷市值 ≥10% 已加粗）</div>
+    <div class="scroll">
+      <table class="t1">
+        <thead><tr>
+          <th class="l">币</th><th>市值</th><th>TVL</th><th>TVL÷市值</th>
+          <th>30d费用率</th><th>年化费用÷市值</th><th class="l">匹配</th>
+        </tr></thead>
+        <tbody id="deep-fund-body"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>最新简报 <span class="note mono" id="brief-ts">—</span></h2>
+    <div class="brief" id="brief"></div>
+  </section>
+</main>
+
+<footer>
+  ⚠️ 以上只是「跌得多 + 有使用量」的事实筛选，阈值未经历史检验，不等于便宜、更不等于该买。
+</footer>
+
+<script>
+(function(){
+"use strict";
+
+var $ = function(id){ return document.getElementById(id); };
+
+/* ---------------------- 格式化 ---------------------- */
+function isNum(v){ return typeof v === 'number' && isFinite(v); }
+function strip0(s){ return s.replace(/\.0+$/,''); }
+
+/* 金额紧凑写法: $1.43B / $12.9B / $538M —— 最多 3 位有效数字 */
+function money(v){
+  if(!isNum(v)) return '—';
+  var a = Math.abs(v);
+  function unit(div, suf){
+    var n = a / div, dp = n < 10 ? 2 : (n < 100 ? 1 : 0);
+    return strip0(n.toFixed(dp)) + suf;
+  }
+  var s;
+  if(a >= 1e12)      s = unit(1e12, 'T');
+  else if(a >= 1e9)  s = unit(1e9,  'B');
+  else if(a >= 1e6)  s = unit(1e6,  'M');
+  else if(a >= 1e3)  s = unit(1e3,  'K');
+  else               s = a.toFixed(2);
+  return (v < 0 ? '-$' : '$') + s;
+}
+
+/* 价格: 2494 / 12.35 / 0.1418 */
+function price(v){
+  if(!isNum(v)) return '—';
+  var a = Math.abs(v), s;
+  if(a >= 1000)     s = v.toLocaleString('en-US', {maximumFractionDigits:0});
+  else if(a >= 1)   s = v.toFixed(2);
+  else if(a >= 0.01) s = v.toFixed(4);
+  else              s = strip0(v.toFixed(8));
+  return (v < 0 ? '-$' : '$') + s;
+}
+
+/* 百分比: 1 位小数, 可选正负号 */
+function pct(v, signed){
+  if(!isNum(v)) return '—';
+  var s = v.toFixed(1);
+  if(signed && v > 0) s = '+' + s;
+  return s + '%';
+}
+/* 回撤一律按负值展示 */
+function dd(v){ return isNum(v) ? pct(-Math.abs(v)) : '—'; }
+/* 颜色: 收益/回撤 */
+function cls(v){ if(!isNum(v)) return 'flat'; return v > 0 ? 'pos' : (v < 0 ? 'neg' : 'flat'); }
+function span(v, fn){ return '<span class="mono ' + cls(v) + '">' + fn(v) + '</span>'; }
+
+/* 广度比例: 后端给 [0,1] 比例 → 显示成百分数 */
+function ratioPct(v){
+  if(!isNum(v)) return '—';
+  var p = Math.abs(v) <= 1 ? v * 100 : v;
+  return pct(p, false);
+}
+
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+/* 只显示到分钟 */
+function clock(ts){
+  if(!ts) return '—';
+  var m = String(ts).match(/\d{4}-\d{2}-\d{2}[ T](\d{2}:\d{2})/);
+  return m ? m[1] : String(ts);
+}
+
+/* ---------------------- 渲染: 广度卡片 ---------------------- */
+
+function renderFiles(d){
+  var f = (d && d.files) || {}, box = $('files'), html = [];
+
+  var names = {candidates_json:'候选池', data_json:'行情/情绪', watchlist:'观察池'};
+  var keys  = ['candidates_json','data_json','watchlist'];
+  for(var i=0;i<keys.length;i++){
+    var k = keys[i], v = f[k], ok = (v === 'ok');
+    html.push('<span class="chip' + (ok ? '' : ' bad') + '">' + esc(names[k]) + ' ' + esc(v == null ? '缺失' : v) + '</span>');
+  }
+  var ms = (d && d.missing) || [];
+  if(ms.length) html.push('<span class="chip bad">missing: ' + esc(ms.slice(0,6).join(', ')) + '</span>');
+  box.innerHTML = html.join('');
+}
+
+function renderCards(d){
+  var b = (d && d.breadth) || {};
+  $('c-b50').textContent  = ratioPct(b.breadth_drawdown_50pct);
+  $('c-r1').textContent   = ratioPct(b.breadth_ret1y_neg);
+  var mcap = b.mcap_weighted_drawdown_pct;
+  var me = $('c-mcap');
+  me.textContent = pct(isNum(mcap) ? mcap : null, false);
+  me.className = 'v mono ' + cls(mcap);
+
+  $('c-meddd').textContent = pct(b.median_drawdown_pct, false);
+  $('c-medr1').textContent = pct(b.median_ret1y_pct, false);
+
+  var n = isNum(b.screened) ? b.screened : null;
+  $('c-b50-sub').textContent = '等权广度：多少个币在跌' +
+      (isNum(b.drawdown_50pct_count) && n ? '（' + b.drawdown_50pct_count + '/' + n + '）' : '');
+  $('c-r1-sub').textContent = '等权广度：跌势有多普遍' +
+      (isNum(b.with_ret1y) && n ? '（样本 ' + b.with_ret1y + '/' + n + '）' : '');
+}
+
+/* ---------------------- 渲染: 情绪 ---------------------- */
+function renderFng(d){
+  var s = (d && d.sentiment) || {};
+  var f = s.crypto_fng || null;
+  var el = $('fng-v'), lab = $('fng-lab');
+
+  if(!f || !isNum(f.value)){
+    el.textContent = '—';
+    el.style.color = 'var(--muted)';
+    lab.textContent = 'Crypto F&G 缺失';
+    lab.style.color = 'var(--muted)';
+    $('fng-pct').textContent = '—';
+    $('fng-chg').textContent = '—';
+    $('fng-prev').textContent = '—';
+    $('fng-asof').textContent = '—';
+    return;
+  }
+  var col = f.value <= 25 ? 'var(--green)' : (f.value < 45 ? 'var(--yellow)' : 'var(--gray)');
+  el.textContent = String(f.value);
+  el.style.color = col;
+  lab.textContent = 'Crypto F&G · ' + (f.label || '—');
+  lab.style.color = col;
+
+  $('fng-pct').textContent = ratioPct(f.percentile);
+  var ch = $('fng-chg');
+  ch.textContent = isNum(f.change) ? (f.change > 0 ? '+' + f.change : String(f.change)) : '—';
+  ch.style.color = isNum(f.change) ? (f.change > 0 ? 'var(--red)' : (f.change < 0 ? 'var(--green)' : 'var(--muted)')) : 'var(--muted)';
+  ch.title = '恐慌下降 = 绿（机会方向），情绪上升 = 红';
+  $('fng-prev').textContent = isNum(f.prev) ? String(f.prev) : '—';
+  $('fng-asof').textContent = f.as_of || '—';
+}
+
+/* ---------------------- 渲染: 候选池 ---------------------- */
+function renderCandidates(d){
+  var c = (d && d.candidates) || {};
+  var rows = c.rows || [];
+  var body = $('cand-body');
+
+  if(!rows.length){
+    body.innerHTML = '<tr><td colspan="12" class="empty">暂无候选数据</td></tr>';
+  } else {
+    var out = [];
+    for(var i=0;i<rows.length;i++){
+      var r = rows[i] || {};
+      var sym = esc(r.symbol == null ? '—' : r.symbol) + (r.also_down_1y ? '*' : '');
+      out.push('<tr class="' + (i < 3 ? 'top3' : '') + '">'
+        + '<td class="score mono">' + (isNum(r.screen_score) ? r.screen_score.toFixed(3) : '—') + '</td>'
+        + '<td class="l sym">' + sym + '</td>'
+        + '<td class="mono">' + price(r.price_usd) + '</td>'
+        + '<td class="mono dd">' + dd(r.drawdown_from_ath_pct) + '</td>'
+        + '<td>' + span(r.ret_7d_pct, function(v){return pct(v,true);}) + '</td>'
+        + '<td>' + span(r.ret_30d_pct, function(v){return pct(v,true);}) + '</td>'
+        + '<td>' + span(r.ret_1y_pct, function(v){return pct(v,true);}) + '</td>'
+        + '<td class="mono">' + money(r.mcap_usd) + '</td>'
+        + '<td class="mono">' + money(r.vol24h_usd) + '</td>'
+        + '<td class="mono">' + money(r.tvl_usd) + '</td>'
+        + '<td class="mono">' + (isNum(r.tvl_mcap_ratio) ? r.tvl_mcap_ratio.toFixed(2) : '—') + '</td>'
+        + '<td class="l dim">' + esc(r.category == null ? '—' : r.category) + '</td>'
+        + '</tr>');
+    }
+    body.innerHTML = out.join('');
+  }
+
+  var parts = [];
+  if(isNum(c.screened)) parts.push('扫了 ' + c.screened + ' 个');
+  if(isNum(c.passed))   parts.push('通过 ' + c.passed + ' 个');
+  parts.push('只列前 ' + rows.length + ' 个');
+  var foot = parts.join(' / ');
+  if(c.ts) foot += ' · 数据时间 ' + esc(c.ts);
+  $('cand-count').textContent = (isNum(c.screened) || isNum(c.passed)) ? '(' + parts.slice(0,2).join(' / ') + ')' : '';
+  $('cand-foot').textContent = foot + ' · 带 * = 该币 1 年维度同时为负（跌了不只一年）';
+}
+
+/* ---------------------- 渲染: 观察池 ---------------------- */
+var PLACEHOLDER = /示例|请改成你自己的逻辑/;
+function renderWatchlist(d){
+  var ws = (d && d.watchlist) || [];
+  var body = $('watch-body'), msg = $('watch-msg');
+
+  if(!ws.length){
+    body.innerHTML = '<tr><td colspan="6" class="empty">—</td></tr>';
+    msg.innerHTML = '<div class="empty"><b>观察池还没填 —— 把你想买的标的发我</b></div>';
+    return;
+  }
+  var allPlaceholder = true, out = [];
+  for(var i=0;i<ws.length;i++){
+    var w = ws[i] || {};
+    var ph = PLACEHOLDER.test(String(w.thesis == null ? '' : w.thesis));
+    if(!ph) allPlaceholder = false;
+    var tag = (w.market && w.market !== 'crypto') ? ' <span class="badge">' + esc(w.market.toUpperCase()) + '</span>' : '';
+    out.push('<tr>'
+      + '<td class="l sym" title="' + esc(w.thesis || '') + '">' + esc(w.symbol == null ? '—' : w.symbol)
+      + (ph ? ' <span class="badge">示例</span>' : '') + tag + '</td>'
+      + '<td class="mono">' + price(w.current_price) + '</td>'
+      + '<td class="mono dd">' + dd(w.drawdown_from_ath_pct) + '</td>'
+      + '<td>' + span(w.ret_7d_pct, function(v){return pct(v,true);}) + '</td>'
+      + '<td>' + span(w.ret_30d_pct, function(v){return pct(v,true);}) + '</td>'
+      + '<td>' + (w.triggered
+            ? '<span class="badge ok">触发</span>'
+            : '<span class="dim">等待</span>') + '</td>'
+      + '</tr>');
+  }
+  body.innerHTML = out.join('');
+  msg.innerHTML = allPlaceholder
+    ? '<div class="empty"><b>观察池还没填 —— 把你想买的标的发我</b>（下表为默认示例条目）</div>'
+    : '';
+}
+
+/* ---------------------- 展开状态（30s 刷新不丢） ---------------------- */
+/* 只记「展开的 key」，重建表格后按 key 还原；<details> 折叠框是静态节点，压根不重建 */
+var last = {data:null, brief:null, discount:null, deep:null};
+var openKeys = {};
+function isOpen(k){ return !!openKeys[k]; }
+function toggleOpen(k){ if(openKeys[k]) delete openKeys[k]; else openKeys[k] = true; }
+function delegateRows(el, cb){
+  el.addEventListener('click', function(e){
+    var n = e.target;
+    while(n && n !== el && n.tagName !== 'TR'){ n = n.parentNode; }
+    if(!n || n === el || n.tagName !== 'TR') return;
+    var k = n.getAttribute('data-key');
+    if(k){ cb(k); }
+  });
+}
+
+/* ---------------------- 渲染: 折价区 ---------------------- */
+var BAND_RULES = [['极度充足','band-bl'], ['充足','band-gr'], ['极度枯竭','band-rd'], ['枯竭','band-or']];
+function bandClass(band){
+  var s = String(band == null ? '' : band);
+  for(var i=0;i<BAND_RULES.length;i++){ if(s.indexOf(BAND_RULES[i][0]) >= 0) return BAND_RULES[i][1]; }
+  return 'band-gy';
+}
+function cnt(v){ return isNum(v) ? String(v) : '—'; }
+function num0(v, dp){ return isNum(v) ? v.toFixed(dp === undefined ? 1 : dp) : '—'; }
+function days0(v){ return isNum(v) ? num0(v, 1) + ' 天' : '—'; }
+function dashS(v){ return (v === null || v === undefined || v === '') ? '—' : String(v); }
+
+function staleMsg(p, what){
+  if(!p || p.ok !== true) return (p && p.reason) ? p.reason : '数据缺失';
+  if(!p.stale) return '';
+  var age = isNum(p.age_hours)
+    ? (p.age_hours >= 1 ? num0(p.age_hours, 1) + ' 小时' : Math.max(1, Math.round(p.age_hours * 60)) + ' 分钟')
+    : '未知';
+  return '⚠️ ' + what + '数据可能已过期：上次更新 ' + age + '前（阈值 '
+       + (isNum(p.stale_after_hours) ? p.stale_after_hours + 'h' : '—') + '）';
+}
+function setStale(id, p, what){
+  var el = $(id), msg = staleMsg(p, what);
+  el.textContent = msg || '';
+  el.className = 'stale' + (msg ? ' on' : '');
+}
+
+function discCardHtml(b, kind){
+  b = b || {};
+  var st = b.stats || {}, h = [];
+  h.push('<div class="dc-lbl">' + esc(dashS(b.label)) + '</div>');
+  h.push('<div class="dc-main"><span class="dc-v mono">' + pct(st.median, false) + '</span>'
+       + '<span class="band ' + bandClass(b.band) + '">' + esc(dashS(b.band)) + '</span></div>');
+  h.push('<div class="dc-sub">中位回撤 · 档位（字段 ' + esc(dashS(b.field)) + '）</div>');
+  h.push('<div class="dc-line">样本 ' + cnt(st.count) + ' · p25 ' + pct(st.p25, false)
+       + ' · p75 ' + pct(st.p75, false) + ' · ≥90% 占比 ' + pct(st.pct_ge_90, false)
+       + ' · 抄底参考深度 ≈ 中位数 ' + pct(b.suggested_depth_pct, false) + '</div>');
+  if(kind === 'mainstream'){
+    var bs = b.breadth_sample || {};
+    h.push('<div class="dc-line dim">全市场无偏样本 ' + (isNum(bs.sample_n) ? bs.sample_n + ' 个' : '—')
+         + (isNum(b.market_weighted_pct) ? ' · 市值加权 ' + pct(b.market_weighted_pct, false) : '') + '</div>');
+  } else {
+    h.push('<div class="dc-line dim">过滤掉 ' + cnt(b.excluded_major) + ' 个稳定/包装币后 '
+         + cnt(b.eligible) + ' 个（桶内可用样本）</div>');
+  }
+  return h.join('');
+}
+
+function ddCell(v){
+  var hot = isNum(v) && Math.abs(v) >= 90;
+  return '<td class="mono dd' + (hot ? ' hot' : '') + '">' + dd(v) + '</td>';
+}
+function byDesc(field){
+  return function(a, b){
+    var x = a ? a[field] : null, y = b ? b[field] : null;
+    if(!isNum(x)) return 1;
+    if(!isNum(y)) return -1;
+    return y - x;
+  };
+}
+
+function renderDiscount(p){
+  var okp = !!(p && p.ok === true);
+  var reason = esc((p && p.reason) || '数据缺失');
+  var b = (p && p.buckets) || {};
+  $('disc-ts').textContent = (p && p.ts_iso) ? clock(p.ts_iso) : '—';
+  setStale('disc-stale', p, '折价区');
+
+  $('disc-ms').innerHTML   = okp ? discCardHtml(b.mainstream, 'mainstream') : '<div class="empty">' + reason + '</div>';
+  $('disc-meme').innerHTML = okp ? discCardHtml(b.meme, 'meme') : '<div class="empty">' + reason + '</div>';
+
+  var msItems = (okp && b.mainstream && b.mainstream.items) || [];
+  var msBody = $('disc-ms-body'), out = [], i;
+  if(!msItems.length){
+    msBody.innerHTML = '<tr><td colspan="2" class="empty">' + (okp ? '—' : reason) + '</td></tr>';
+  } else {
+    var sorted = msItems.slice().sort(byDesc('dd_ath'));
+    for(i=0;i<sorted.length;i++){
+      out.push('<tr><td class="l sym">' + esc(dashS(sorted[i].symbol)) + '</td>'
+             + ddCell(sorted[i].dd_ath) + '</tr>');
+    }
+    msBody.innerHTML = out.join('');
+  }
+  var cal = (p && p.calibers) || {};
+  var msFoot = [];
+  if(cal.prescreened_candidates) msFoot.push(cal.prescreened_candidates);
+  if(cal.breadth_p25_p75_note) msFoot.push(cal.breadth_p25_p75_note);
+  $('disc-ms-foot').textContent = msFoot.join(' · ');
+
+  var mmItems = (okp && b.meme && b.meme.items) || [];
+  var mmBody = $('disc-meme-body'), mo = [];
+  if(!mmItems.length){
+    mmBody.innerHTML = '<tr><td colspan="11" class="empty">' + (okp ? '—' : reason) + '</td></tr>';
+  } else {
+    for(i=0;i<mmItems.length;i++){
+      var r = mmItems[i] || {};
+      mo.push('<tr>'
+        + '<td class="l sym">' + esc(dashS(r.symbol))
+        + ' <span class="pname">' + esc(dashS(r.name)) + '</span></td>'
+        + '<td class="l dim">' + esc(dashS(r.net)) + '</td>'
+        + '<td class="mono">' + price(r.price_usd) + '</td>'
+        + ddCell(r.dd_180d)
+        + '<td class="mono">' + days0(r.window_days) + '</td>'
+        + '<td class="mono">' + days0(r.days_since_high) + '</td>'
+        + '<td class="mono">' + days0(r.age_days) + '</td>'
+        + '<td class="mono">' + money(r.liquidity_usd) + '</td>'
+        + '<td class="mono">' + money(r.fdv_usd) + '</td>'
+        + '<td class="mono">' + money(r.vol_h24_usd) + '</td>'
+        + ddCell(r.dd_ath)
+        + '</tr>');
+    }
+    mmBody.innerHTML = mo.join('');
+  }
+  var meta = (p && p.meme_meta) || {}, mf = [];
+  if(isNum(meta.eligible)) mf.push('合格池 ' + meta.eligible + ' 个');
+  if(isNum(meta.excluded_symbol)) mf.push('排除同名稳定/包装币 ' + meta.excluded_symbol + ' 个');
+  if(meta.ohlcv_missing && meta.ohlcv_missing.length) mf.push('OHLCV 缺失 ' + meta.ohlcv_missing.length + ' 条');
+  if(meta.cg_missing && meta.cg_missing.length) mf.push('CoinGecko 真实ATH 缺失 ' + meta.cg_missing.length + ' 条');
+  $('disc-meme-foot').textContent = mf.join(' · ');
+}
+
+/* ---------------------- 渲染: 深度依据 ---------------------- */
+function fmtNum(v){
+  if(!isNum(v)) return '—';
+  var a = Math.abs(v);
+  if(a >= 1000) return v.toLocaleString('en-US', {maximumFractionDigits:0});
+  if(a >= 1) return v.toFixed(2);
+  return strip0(v.toFixed(4));
+}
+function posBar(v){
+  if(!isNum(v)) return '—';
+  var p = Math.max(0, Math.min(100, v));
+  var c = p >= 80 ? 'p80' : (p >= 60 ? 'p60' : (p >= 40 ? 'p40' : (p <= 20 ? 'p20' : 'pdef')));
+  return '<div class="pbarwrap"><div class="pbar ' + c + '"><i style="width:' + p.toFixed(1) + '%"></i></div>'
+       + '<span class="mono">' + p.toFixed(1) + '%</span></div>';
+}
+function maCell(arr){
+  var s = String(arr == null ? '' : arr);
+  var c = s.indexOf('多头') >= 0 ? 'pos' : (s.indexOf('空头') >= 0 ? 'neg' : 'flat');
+  return '<td class="l ' + c + '">' + esc(s || '—') + '</td>';
+}
+function rsiCell(v, state){
+  var s = String(state == null ? '' : state);
+  var c = s.indexOf('超买') >= 0 ? 'hot' : (s.indexOf('超卖') >= 0 ? 'blue' : 'flat');
+  if(!isNum(v)) return '<td class="mono ' + c + '">—</td>';
+  return '<td class="mono ' + c + '">' + num0(v, 1)
+       + (s ? ' <span class="dim">' + esc(s) + '</span>' : '') + '</td>';
+}
+function fundDetailHtml(f, a){
+  f = f || {};
+  var prots = (f.matched_protocols && f.matched_protocols.length)
+    ? f.matched_protocols : (f.llama_matched_protocols || []);
+  var h = ['<div class="det"><div class="kv">'];
+  h.push('<div><span class="k">币</span>' + esc(dashS(a && a.name)) + '（' + esc(dashS(a && a.symbol)) + '）</div>');
+  h.push('<div><span class="k">匹配方式</span>' + esc(dashS(f.match_kind))
+       + (f.llama_matched === false ? '（DefiLlama 未匹配到协议）' : '') + '</div>');
+  h.push('<div><span class="k">参与合并的协议</span>' + (prots.length ? esc(prots.join('、')) : '—') + '</div>');
+  h.push('<div><span class="k">DefiLlama 协议名</span>' + esc(dashS(f.llama_name)) + '</div>');
+  h.push('<div><span class="k">类别</span>' + esc(dashS(f.category)) + '</div>');
+  h.push('<div><span class="k">费用</span>24h ' + money(f.fees_24h) + ' · 30d ' + money(f.fees_30d)
+       + ' · 年化 ' + money(f.fees_annualized) + '</div>');
+  h.push('<div><span class="k">市值来源</span>' + esc(dashS(f.mcap_source)) + '</div>');
+  h.push('</div>');
+  var rules = [];
+  if(f.fees_rule) rules.push('fees：' + f.fees_rule);
+  if(f.llama_rule) rules.push('tvl：' + f.llama_rule);
+  if(rules.length) h.push('<div><span class="k">匹配规则</span>' + esc(rules.join('；')) + '</div>');
+  if(f.fees_error) h.push('<div class="warn">fees 取数错误：' + esc(f.fees_error) + '</div>');
+  if(f.notes && f.notes.length){
+    var li = [];
+    for(var i=0;i<f.notes.length;i++){ li.push('<li>' + esc(f.notes[i]) + '</li>'); }
+    h.push('<div><span class="k">注记</span><ul>' + li.join('') + '</ul></div>');
+  }
+  h.push('</div>');
+  return h.join('');
+}
+
+function renderDeep(p){
+  var okp = !!(p && p.ok === true);
+  var reason = esc((p && p.reason) || '数据缺失');
+  $('deep-ts').textContent = (p && p.ts_iso) ? clock(p.ts_iso) : '—';
+  setStale('deep-stale', p, '深度依据');
+
+  var rows = (okp && p.macro && p.macro.rows) || [], out = [], i;
+  if(!okp){
+    out.push('<tr><td colspan="6" class="empty">' + reason + '</td></tr>');
+  } else {
+    for(i=0;i<rows.length;i++){
+      var r = rows[i] || {};
+      if(r.ok !== true){
+        out.push('<tr><td class="l">' + esc(dashS(r.label)) + '</td><td colspan="5" class="l dim">缺失'
+               + (r.error ? '（' + esc(r.error) + '）' : '') + '</td></tr>');
+        continue;
+      }
+      out.push('<tr>'
+        + '<td class="l">' + esc(dashS(r.label)) + '</td>'
+        + '<td class="mono">' + fmtNum(r.last) + '</td>'
+        + '<td>' + span(r.day_change_pct, function(v){ return pct(v, true); }) + '</td>'
+        + '<td>' + span(r.from_high_pct, function(v){ return pct(v, true); }) + '</td>'
+        + '<td>' + span(r.from_low_pct, function(v){ return pct(v, true); }) + '</td>'
+        + '<td>' + posBar(r.range_pos_pct) + '</td>'
+        + '</tr>');
+    }
+    var cm = (okp && p.crypto_market) || {};
+    out.push('<tr>'
+      + '<td class="l">加密大盘 <span class="dim">' + esc(dashS(cm.source)) + '</span>'
+      + '<div class="dc-line">BTC 占比 ' + pct(cm.btc_dominance_pct, false)
+      + ' · ETH 占比 ' + pct(cm.eth_dominance_pct, false) + '</div></td>'
+      + '<td class="mono">' + money(cm.total_mcap_usd) + '</td>'
+      + '<td>' + span(cm.mcap_change_24h_pct, function(v){ return pct(v, true); }) + '</td>'
+      + '<td class="dim">—</td><td class="dim">—</td><td class="dim">—</td>'
+      + '</tr>');
+  }
+  $('deep-macro-body').innerHTML = out.join('');
+
+  var assets = (okp && p.assets) || [], to = [];
+  if(!okp){
+    to.push('<tr><td colspan="14" class="empty">' + reason + '</td></tr>');
+  } else if(!assets.length){
+    to.push('<tr><td colspan="14" class="empty">—</td></tr>');
+  } else {
+    for(i=0;i<assets.length;i++){
+      var a = assets[i] || {}, t = a.technical || {};
+      if(t.ok !== true){
+        to.push('<tr><td class="l sym">' + esc(dashS(a.symbol)) + '</td>'
+              + '<td colspan="13" class="l dim">缺失'
+              + (t.error ? '（' + esc(t.error) + '）' : '') + '</td></tr>');
+        continue;
+      }
+      var vs = t.vs_ma200 || {}, ret = t.ret || {}, vol = t.volume || {}, yr = t.year || {};
+      to.push('<tr>'
+        + '<td class="l sym">' + esc(dashS(a.symbol)) + '</td>'
+        + '<td class="mono">' + price(t.price) + '</td>'
+        + maCell(t.ma_arrangement)
+        + '<td>' + span(vs.distance_pct, function(v){ return pct(v, true); }) + '</td>'
+        + rsiCell(t.rsi14_d, t.rsi14_d_state)
+        + rsiCell(t.rsi14_w, t.rsi14_w_state)
+        + '<td>' + span(ret['7d'], function(v){ return pct(v, true); }) + '</td>'
+        + '<td>' + span(ret['30d'], function(v){ return pct(v, true); }) + '</td>'
+        + '<td>' + span(ret['90d'], function(v){ return pct(v, true); }) + '</td>'
+        + '<td>' + span(ret['365d'], function(v){ return pct(v, true); }) + '</td>'
+        + '<td class="mono ' + cls(vol.change_pct) + '">' + pct(vol.change_pct, true)
+        + ' <span class="dim">' + esc(dashS(vol.state)) + '</span></td>'
+        + '<td class="mono">' + pct(t.atr_pct, false) + '</td>'
+        + '<td>' + span(yr.from_high_pct, function(v){ return pct(v, true); }) + '</td>'
+        + '<td class="mono">' + money(a.mcap_usd) + '</td>'
+        + '</tr>');
+    }
+  }
+  $('deep-tech-body').innerHTML = to.join('');
+
+  var fo = [];
+  if(!okp){
+    fo.push('<tr><td colspan="7" class="empty">' + reason + '</td></tr>');
+  } else if(!assets.length){
+    fo.push('<tr><td colspan="7" class="empty">—</td></tr>');
+  } else {
+    for(i=0;i<assets.length;i++){
+      var a2 = assets[i] || {}, f = a2.fundamentals || {};
+      var key = 'deep:fund:' + (a2.id || a2.symbol || i);
+      var hi = isNum(f.fee_yield_annualized_pct) && f.fee_yield_annualized_pct >= 10;
+      var feeTxt = pct(f.fee_yield_annualized_pct, false);
+      fo.push('<tr class="xrow' + (isOpen(key) ? ' open' : '') + '" data-key="' + esc(key) + '">'
+        + '<td class="l sym">' + esc(dashS(a2.symbol)) + '</td>'
+        + '<td class="mono">' + money(f.mcap_usd) + '</td>'
+        + '<td class="mono">' + money(f.tvl) + '</td>'
+        + '<td class="mono">' + pct(f.tvl_mcap_ratio_pct, false) + '</td>'
+        + '<td class="mono">' + pct(f.fee_yield_30d_pct, false) + '</td>'
+        + '<td class="mono' + (hi ? ' hi' : '') + '">' + (hi ? '<b>' + feeTxt + '</b>' : feeTxt) + '</td>'
+        + '<td class="l dim">' + esc(dashS(f.match_kind)) + '</td>'
+        + '</tr>');
+      if(isOpen(key)){
+        fo.push('<tr class="xdet"><td colspan="7">' + fundDetailHtml(f, a2) + '</td></tr>');
+      }
+    }
+  }
+  $('deep-fund-body').innerHTML = fo.join('');
+}
+
+/* ---------------------- 渲染: 简报 ---------------------- */
+function inlineMd(s){
+  return s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+/* ---------- 页面版本号：代码更新后自动刷新（用户不用手动硬刷新） ----------
+   真机教训：面板重启/代码更新后，用户开着的旧页面里 JS 还是旧版 → 「功能加了但我看不到」。
+   页面里内联一份构建号（meta[name=bc-build]，服务端替换 __BUILD__），每次轮询 /api/brief
+   时和服务器给的 build 比：不一样 → 顶部弹提示 → 1 秒后自动 reload。 */
+var buildReload = false;
+
+function pageBuild(){
+  try{
+    if(!document.querySelector){ return null; }               // 老浏览器/测试桩：不比，不误刷新
+    var el = document.querySelector('meta[name="bc-build"]');
+    var v = (el && el.getAttribute) ? el.getAttribute('content') : null;
+    return (v && v.indexOf('__') !== 0) ? String(v) : null;    // 占位没被替换 → 不比对
+  }catch(e){ return null; }
+}
+
+function showBuildNote(){
+  var n = $('buildnote');
+  if(n && n.classList){ n.classList.add('on'); }
+}
+
+function checkBuild(b){
+  if(buildReload){ return; }
+  var mine = pageBuild(), theirs = (b && b.build) ? String(b.build) : null;
+  if(!mine || !theirs || mine === theirs){ return; }
+  buildReload = true;
+  showBuildNote();                                            // 「面板已更新，正在刷新…」
+  setTimeout(function(){
+    if(typeof location !== 'undefined' && location && location.reload){ location.reload(); }
+  }, 1000);
+}
+
+function renderBrief(b){
+  checkBuild(b);
+  var txt = (b && b.brief) || '';
+  $('brief-ts').textContent = (b && b.ts) ? clock(b.ts) : '无简报文件';
+  if(!txt){
+    $('brief').innerHTML = '<div class="empty">暂无简报</div>';
+    return;
+  }
+  var lines = txt.replace(/\s+$/, '').split('\n'), out = [];
+  for(var i=0;i<lines.length;i++){
+    var ln = lines[i];
+    var h = /^(#{1,6})\s*(.+?)\s*$/.exec(ln);
+    if(h){
+      out.push('<div class="md-h md-h' + h[1].length + '">' + inlineMd(esc(h[2])) + '</div>');
+    } else if(ln.trim() === ''){
+      out.push('<div class="md-l">&nbsp;</div>');
+    } else {
+      var body = inlineMd(esc(ln));
+      if(/^\s*[-*]\s+/.test(ln)) out.push('<div class="md-l" style="padding-left:10px">' + body.replace(/^(\s*)[-*]/, '$1·') + '</div>');
+      else out.push('<div class="md-l">' + body + '</div>');
+    }
+  }
+  $('brief').innerHTML = out.join('');
+}
+
+function renderData(d){
+  $('updated').textContent = (d && d.updated_at) ? d.updated_at : '—';
+  renderFiles(d);
+  renderCards(d);
+  renderFng(d);
+  renderCandidates(d);
+  renderWatchlist(d);
+}
+
+/* ---------------------- 查询 ---------------------- */
+var lastQuery = null;   // 上次成功的 /api/lookup 结果
+var qSel = null;        // 详情卡展开的行号
+var Q_TIMEOUT_MS = 45000;             // 单次尝试超时：上游代理差时 /api/lookup 能跑 100s+，不让浏览器干等
+var Q_RETRY_WAITS_MS = [800, 1500];   // 失败后的重试间隔（800ms / 1500ms）→ 共 3 次尝试
+var Q_MAX_TRIES = 3;                  // GET /api/* 默认尝试次数（首次 + 2 次重试）
+var Q_POST_MAX_TRIES = 2;             // 会改状态的 POST（起任务）最多 2 次，只在网络层失败时重试
+
+function setQBtn(on){
+  var b = $('q-btn');
+  b.disabled = !!on;
+  b.textContent = on ? '查询中…' : '查询';
+}
+
+function setQStatus(html, klass){
+  var el = $('q-status');
+  el.innerHTML = html || '';
+  el.className = 'note-line' + (klass ? ' ' + klass : '');
+}
+
+/* 上游熔断状态那行小字：上游:CoinGecko(熔断中 12s) DexScreener(正常) */
+function setUpstream(p){
+  var el = $('q-upstream');
+  if(!el) return;
+  var u = p && p.upstream;
+  el.textContent = u ? String(u) : '';
+  el.className = 'note-line' + (u && u.indexOf('熔断中') >= 0 ? ' q-warn' : '');
+}
+
+/* 汇总行：每次查询后重画，清空 / 失败时清掉 */
+function setQSummary(html, klass){
+  var el = $('q-summary');
+  if(!el) return;
+  el.innerHTML = html || '';
+  el.className = 'note-line' + (klass ? ' ' + klass : '');
+}
+
+/* 缓存年龄：source_age_s（秒）→「2 分钟前」；拿不到年龄就写「陈旧」 */
+function cacheAge(sec){
+  if(!isNum(sec)) return '';
+  return Math.max(1, Math.round(sec / 60)) + ' 分钟前';
+}
+
+/* 数据源标签：只有降级 / 吃缓存的结果才标，正常 CoinGecko 结果不打扰用户 */
+function isGtSource(s){ return typeof s === 'string' && s.indexOf('geckoterminal') === 0; }
+function isDsSource(s){ return typeof s === 'string' && s.indexOf('dexscreener') === 0; }
+function srcTag(s, ageS){
+  if(isGtSource(s)) return '<span class="qsrc">源:GeckoTerminal(全链)</span>';
+  if(isDsSource(s)) return '<span class="qsrc">源:DexScreener(不限链)</span>';
+  if(s === 'coinpaprika') return '<span class="qsrc">源:CoinPaprika(降级)</span>';
+  if(s === 'mixed') return '<span class="qsrc">源:CoinGecko+CoinPaprika(降级)</span>';
+  if(s === 'cache') return '<span class="qsrc">源:缓存(' + (cacheAge(ageS) || '陈旧') + ')</span>';
+  if(s === 'defillama') return '<span class="qsrc">源:DefiLlama(直连)</span>';
+  if(s === 'none') return '<span class="qsrc">源:缺失(无行情)</span>';
+  return '';
+}
+
+function srcText(s, ageS){
+  if(isGtSource(s)) return 'GeckoTerminal(全链)';
+  if(isDsSource(s)) return 'DexScreener(不限链)';
+  /* GMGN market search：地址查询的第一顺位（独立主机 + 独立熔断桶，别的源全挂时它也能回话） */
+  if(s === 'gmgn search') return 'GMGN search';
+  if(s === 'coinpaprika') return 'CoinPaprika(降级)';
+  if(s === 'mixed') return 'CoinGecko+CoinPaprika(降级)';
+  if(s === 'cache') return '缓存(' + (cacheAge(ageS) || '陈旧') + ')';
+  if(s === 'defillama') return 'DefiLlama(直连)';
+  if(s === 'none') return '缺失(无行情)';
+  return s === 'coingecko' ? 'CoinGecko' : '—';
+}
+
+/* 「回撤 ≥50% 占比」汇总：分母只算 drawdown_from_ath_pct 非 null 的行 */
+function renderQSummary(rows){
+  rows = rows || [];
+  if(!rows.length){ setQSummary(''); return; }
+  var dds = [];
+  for(var i=0;i<rows.length;i++){
+    var v = rows[i] ? rows[i].drawdown_from_ath_pct : null;
+    if(isNum(v)) dds.push(-Math.abs(v));        // 距ATH 口径：负数 = 回撤深度
+  }
+  var head = '查到 ' + rows.length + ' 条';
+  if(!dds.length){
+    setQSummary(head + ' · 回撤数据缺失，无法统计' + degradedTail(rows), 'q-warn');
+    return;
+  }
+  dds.sort(function(a, b){ return a - b; });    // 升序：-90 → -10
+  var mid = dds.length % 2
+    ? dds[(dds.length - 1) / 2]
+    : (dds[dds.length / 2 - 1] + dds[dds.length / 2]) / 2;
+  var n50 = 0;
+  for(var j=0;j<dds.length;j++){ if(Math.abs(dds[j]) >= 50) n50++; }
+  setQSummary(head + ' · 回撤 ≥50% 的占 ' + Math.round(n50 / dds.length * 100) + '%（'
+              + n50 + '/' + dds.length + '）'
+              + '· 中位回撤 ' + dd(mid) + '（距ATH 口径）'
+              + degradedTail(rows), '');
+}
+
+/* 降级 / 吃缓存的条目数：>0 时在汇总行末尾补一句（不编数字，只看 source） */
+function degradedTail(rows){
+  var n = 0;
+  for(var i=0;i<rows.length;i++){
+    var s = rows[i] ? rows[i].source : null;
+    if(s === 'coinpaprika' || s === 'mixed' || s === 'cache' || s === 'defillama') n++;
+  }
+  return n ? '· 其中 ' + n + ' 条为降级/缓存数据' : '';   /* 分隔符风格与上一段保持一致 */
+}
+
+function candBadge(v){ return v ? '<span class="badge cand">是</span>' : '<span class="dim">否</span>'; }
+function chainText(c){ return (c && c.length) ? c.join(' / ') : '—'; }
+
+/* 展开的详情卡：全部字段 + 加入 / 移出观察池 */
+function detailHtml(r, i){
+  var cell = [];
+  function add(k, v, klass){
+    cell.push('<div><span class="k">' + k + '</span><span class="mono ' + (klass || '') + '">' + v + '</span></div>');
+  }
+  add('id', esc(r.id == null ? '—' : r.id));
+  add('符号', esc(r.symbol == null ? '—' : r.symbol));
+  add('名称', esc(r.name == null ? '—' : r.name));
+  add('市值排名', isNum(r.market_cap_rank) ? '#' + r.market_cap_rank : '—');
+  add('现价', price(r.price_usd));
+  add('距ATH', dd(r.drawdown_from_ath_pct), 'dd');
+  add('7d', isNum(r.ret_7d_pct) ? pct(r.ret_7d_pct, true) : '—', cls(r.ret_7d_pct));
+  add('30d', isNum(r.ret_30d_pct) ? pct(r.ret_30d_pct, true) : '—', cls(r.ret_30d_pct));
+  add('1y', isNum(r.ret_1y_pct) ? pct(r.ret_1y_pct, true) : '—', cls(r.ret_1y_pct));
+  add('市值', money(r.mcap_usd));
+  add('24h量', money(r.vol24h_usd));
+  add('TVL', money(r.tvl_usd));
+  add('TVL/市值', isNum(r.tvl_mcap_ratio) ? r.tvl_mcap_ratio.toFixed(2) : '—');
+  add('类别', esc(r.category == null ? '—' : r.category));
+  add('链', esc(chainText(r.chains)));
+  add('链ID', esc(r.chain_id == null ? '—' : String(r.chain_id)));
+  add('DEX', esc(r.dex_id == null ? '—' : String(r.dex_id)));
+  add('池子地址', esc(r.pair_address == null ? '—' : String(r.pair_address)));
+  add('流动性', money(r.liquidity_usd));
+  add('FDV', money(r.fdv));
+  add('24h涨跌', isNum(r.price_change_24h) ? pct(r.price_change_24h, true) : '—', cls(r.price_change_24h));
+  add('建池时间', dateText(r.pool_created_at != null ? r.pool_created_at : r.pair_created_at));
+  add('错杀分', isNum(r.screen_score) ? r.screen_score.toFixed(4) : '—', 'score');
+  add('在候选池', candBadge(r.in_candidates));
+  add('在观察池', r.in_watchlist ? '<span class="badge mine">是</span>' : '<span class="dim">否</span>');
+  add('数据源', esc(srcText(r.source, r.source_age_s)));
+  return '<div class="detail">'
+    + '<h3>' + esc(r.symbol || r.id || '—') + (r.name ? ' · ' + esc(r.name) : '') + '</h3>'
+    + '<div class="kv">' + cell.join('') + '</div>'
+    + '<div class="detail-actions">'
+    + '<button type="button" id="q-pool-btn" data-i="' + i + '" class="'
+    + (r.in_watchlist ? 'danger' : 'primary') + '">'
+    + (r.in_watchlist ? '移出观察池' : '加入观察池') + '</button>'
+    + '<span class="note-line" id="q-pool-msg"></span>'
+    + '</div>'
+    + '<div class="note-line">错杀分与候选池同一套公式（0.45×回撤 + 0.35×市值 + 0.20×使用度），可以直接比。</div>'
+    + nullFieldsHtml(r) + '</div>';
+}
+
+/* 缺字段 null 的原因（后端 null_fields = {字段: 一句原因}）；一个都没有就不出这一块 */
+function nullFieldsHtml(r, limit){
+  var nf = (r && r.null_fields) || {};
+  var ks = [];
+  for(var k in nf){ if(Object.prototype.hasOwnProperty.call(nf, k)) ks.push(k); }
+  if(!ks.length) return '';
+  var total = ks.length;
+  ks = ks.slice(0, limit || 8);
+  var out = [];
+  for(var i=0;i<ks.length;i++){ out.push(esc(ks[i]) + '：' + esc(String(nf[ks[i]]))); }
+  var tail = (limit && total > ks.length) ? '（还有 ' + (total - ks.length) + ' 项缺失）' : '';
+  return '<div class="note-line">缺字段原因（一律 null，绝不猜）：' + out.join('；') + tail + '</div>';
+}
+
+/* 建池日期：GeckoTerminal 给 ISO 8601（"2023-04-17T18:43:35Z"），DexScreener 给毫秒时间戳。
+   两种都认；拿不到就 —（绝不编日期）。 */
+function dateText(v){
+  if(isNum(v)) return msDate(v);
+  if(typeof v !== 'string' || !v) return '—';
+  var s = v.replace(/^\s+|\s+$/g, '');
+  var m = /^(\d{4}-\d{2}-\d{2})/.exec(s);
+  if(m) return m[1];
+  var t = Date.parse(s);
+  return isNaN(t) ? '—' : msDate(t);
+}
+
+/* 毫秒时间戳 → YYYY-MM-DD（本地时区）；拿不到就 — */
+function msDate(ms){
+  if(!isNum(ms)) return '—';
+  var d = new Date(ms);
+  if(isNaN(d.getTime())) return '—';
+  function p2(n){ return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+}
+
+/* 查询结果：卡片式大字（手机优先，不用横滚表格）。
+   只重画查询区，绝不碰大盘 / 候选池 / 观察池 / 简报（30s 自动刷新也不会覆盖查询结果） */
+/* ---------- 结构盈亏比（只挂在第 1 条卡片下面） ----------
+   后端只给**查询结果的第 1 条**算（避免 6 条各拉一次日线把额度打爆），前端只排版。
+   ⛔ 口径写死：结构口径，非买卖建议 —— 指标只说明「当下在哪」，不构成买入信号。 */
+function trimNum(v){
+  var s = String(v);
+  return s.indexOf('.') >= 0 ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+}
+function rrTxt(v){ return trimNum(v >= 10 ? v.toFixed(1) : v.toFixed(2)) + ' : 1'; }
+function missWhy(s, key){
+  var why = (s && s.missing && s.missing[key]) || '';
+  return why ? esc(why) : '原因后端没给（只记缺失，不默 0）';
+}
+function srrRow(k, vHtml, dHtml){
+  return '<div class="srr-row"><span class="k">' + k + '</span>'
+       + '<span class="v">' + vHtml + '</span>'
+       + '<span class="d">' + (dHtml || '') + '</span></div>';
+}
+/* 限流文案（结构卡片失败时）：**只读后端 meta.blocked_by**（= [{source,kind,retry_after_s}]），
+   「约 N 秒后恢复」里的 N 就是 retry_after_s —— 后端没给数字，这里就绝不写「约 N 秒」。
+   这两句只在 kind=rate 的源上出现；其它源（Binance / DexScreener 等）限流也照实说。 */
+function srrBlockedHtml(s){
+  var bl = (s && s.meta && s.meta.blocked_by) || [];
+  if(!bl || typeof bl.length !== 'number' || !bl.length){ return ''; }
+  var by = {}, i;
+  for(i = 0; i < bl.length; i++){
+    if(bl[i] && bl[i].source){ by[String(bl[i].source)] = bl[i]; }
+  }
+  /* GT 有没有真的试过：看后端给的 attempts（事实字段，不是前端猜的） */
+  var at = (s.meta && s.meta.attempts) || [], gtTried = false;
+  for(i = 0; i < at.length; i++){
+    if(at[i] && String(at[i].source) === 'geckoterminal'){ gtTried = true; }
+  }
+  var out = [];
+  if(by.gmgn){
+    var ra = isNum(by.gmgn.retry_after_s) ? Math.round(by.gmgn.retry_after_s) : null;
+    out.push('GMGN 限流中' + (ra === null ? '' : ('（约 ' + ra + ' 秒后恢复）'))
+             + (gtTried ? '→ 已尝试 GeckoTerminal' : ''));
+  }
+  if(by.geckoterminal){
+    out.push('GeckoTerminal ' + (by.gmgn ? '也在限流' : '限流中')
+             + '（HTTP 429），稍后再点一次即可');
+  }
+  ['binance', 'dexscreener', 'coingecko'].forEach(function(src){
+    if(!by[src]){ return; }
+    var lab = {binance: 'Binance', dexscreener: 'DexScreener', coingecko: 'CoinGecko'}[src];
+    var n = isNum(by[src].retry_after_s) ? Math.round(by[src].retry_after_s) : null;
+    out.push(lab + ' 限流中' + (n === null ? '' : ('（约 ' + n + ' 秒后恢复）')));
+  });
+  if(!out.length){ return ''; }
+  return '<div class="srr-blocked">'
+       + out.map(function(t){ return '<span class="li">· ' + esc(t) + '</span>'; }).join('')
+       + '</div>';
+}
+
+function structHtml(s){
+  s = s || {};
+  var head = '<div class="srr-h">结构盈亏比 · 非买卖建议</div>';
+  if(s.ok !== true){
+    /* 两条路都拿不到日线：整块写清原因，绝不默 0、绝不编 */
+    return '<div class="srr">' + head
+      + '<div class="srr-sub">结构口径，非买卖建议 · 来源：日线（GMGN → Binance → GeckoTerminal）</div>'
+      + '<div class="srr-err">' + esc(s.error || '日线不可得：未知原因') + '</div>'
+      + srrBlockedHtml(s)
+      + '<div class="srr-gap">其它结果不受影响：结构块只算查询结果的第 1 条'
+      + '（6 条都拉日线会把 CoinGecko / GeckoTerminal 额度打爆）。</div></div>';
+  }
+  var src = s.source_label || '日线';
+  var hiWin = isNum(s.hi_window_days) ? s.hi_window_days : 180;
+  var loWin = isNum(s.lo_window_days) ? s.lo_window_days : 90;
+  /* 参照位的口径必须跟**币龄**对齐（后端算好、前端只照抄，绝不自己编）：
+     · 均线：只有真有 200 根才配叫 MA200，样本不足时叫「可用均线（N 根）」
+     · 低点：样本不足（bars_n<60）时后端给的是**近期窗口低点**（lo_ref="lo_recent"，
+       口径写在 lo_window_label 里：近 w 日最低（该币仅 N 根日线）），行标题就别再写「近 90 日低点」 */
+  var maWin = isNum(s.ma_window) ? s.ma_window : 200;
+  var maLbl = (typeof s.ma_label === 'string' && s.ma_label) ? s.ma_label
+            : (maWin >= 200 ? 'MA200' : '可用均线（' + maWin + ' 根）');
+  var young = isNum(s.bars_n) && s.bars_n < 60;
+  var loTitle = young ? '到前低' : ('到近 ' + loWin + '日低点');
+  var loRef = isNum(s.lo_ref_price) ? s.lo_ref_price : s.lo_90d;
+  /* 参照位的日期跟着 lo_ref 走：后端给 lo_ref_date（lo_recent / lo_90d 都有），别再按字段名猜 */
+  var loDate = (typeof s.lo_ref_date === 'string' && s.lo_ref_date) ? s.lo_ref_date
+             : (s.lo_ref === 'lo_ex_first_bar' ? s.lo_ex_first_bar_date : s.lo_90d_date);
+  var loDesc = (isNum(loRef) ? price(loRef) : '—')
+    + (s.lo_window_label ? ' · ' + esc(s.lo_window_label) : '')
+    + (loDate ? ' · ' + esc(loDate) : '');
+  var out = [head];
+  out.push('<div class="srr-sub">结构口径，<b>非买卖建议</b> · 来源 ' + esc(src)
+    + '（' + (isNum(s.bars_n) ? s.bars_n : '?') + ' 根日线'
+    + (s.bars_start && s.bars_end ? '：' + esc(s.bars_start) + ' → ' + esc(s.bars_end) : '') + '）'
+    + (isNum(s.listing_age_days) ? ' · 上市约 ' + s.listing_age_days + ' 天' : '')
+    + ' · 现价取日线最后一根<b>收盘</b> ' + price(s.price_close)
+    + (s.price_close_date ? '（' + esc(s.price_close_date) + '）' : '')
+    + (isNum(s.live_price) ? ' · 卡片实时 ' + price(s.live_price) : '')
+    + '（日线收盘 vs 实时：口径不同，可能略有差）</div>');
+
+  /* ① 到近 180 日高点 */
+  if(isNum(s.upside_to_hi_pct)){
+    out.push(srrRow('到近' + hiWin + '日高点',
+      '<span class="mono ' + cls(s.upside_to_hi_pct) + '">' + pct(s.upside_to_hi_pct, true) + '</span>',
+      (isNum(s.hi_180d) ? price(s.hi_180d) : '—')
+      + (s.hi_180d_date ? ' · ' + esc(s.hi_180d_date) : '') + ' · ' + esc(src)));
+  } else {
+    out.push(srrRow('到近' + hiWin + '日高点', '<span class="dim">缺失</span>',
+      missWhy(s, 'upside_to_hi_pct')));
+  }
+  /* ② 到前低（口径跟币龄：新币 = **近期窗口低点** lo_ref="lo_recent"，
+        口径文本照抄后端的 lo_window_label，比如「近 17 日最低（该币仅 34 根日线）」） */
+  if(isNum(s.downside_to_lo_pct)){
+    out.push(srrRow(loTitle,
+      '<span class="mono neg">' + pct(-Math.abs(s.downside_to_lo_pct)) + '</span>',
+      loDesc));
+  } else {
+    out.push(srrRow(loTitle, '<span class="dim">缺失</span>',
+      missWhy(s, 'downside_to_lo_pct')));
+  }
+  /* ③ 结构比：downside ≤ 0 时**不显示比值**，写清为什么 */
+  if(isNum(s.rr_ratio)){
+    out.push(srrRow('结构比', '<span class="mono">' + rrTxt(s.rr_ratio) + '</span>',
+      '上行幅度 ÷ 下行幅度'));
+  } else if(s.rr_note){
+    out.push(srrRow('结构比', '<span class="dim">—</span>', esc(s.rr_note)));
+  } else {
+    out.push(srrRow('结构比', '<span class="dim">缺失</span>', missWhy(s, 'rr_ratio')));
+  }
+  /* ④ 现价 vs 均线（真有 200 根才叫 MA200） */
+  if(isNum(s.ma200_gap_pct)){
+    out.push(srrRow('现价 vs ' + esc(maLbl),
+      '<span class="mono ' + cls(s.ma200_gap_pct) + '">' + pct(s.ma200_gap_pct, true) + '</span>',
+      esc(s.ma200_state || '') + (isNum(s.ma200) ? ' · ' + esc(maLbl) + ' ' + price(s.ma200) : '')));
+  } else {
+    out.push(srrRow('现价 vs ' + esc(maLbl), '<span class="dim">缺失</span>', missWhy(s, 'ma200')));
+  }
+  /* ⑤ 四问：全部用真实数字 */
+  var volTxt = '日波动 ' + (isNum(s.atr_pct) ? pct(s.atr_pct, false) : '缺失')
+             + '（ATR' + (isNum(s.atr_days) ? s.atr_days : 14) + '/现价）'
+             + '、近90日最大单日 '
+             + (isNum(s.max_drop_90d_pct) ? pct(s.max_drop_90d_pct) + '<span class="dim">（收盘→收盘）</span>' : '缺失');
+  out.push('<div class="srr-four"><b>四问</b>：Upside '
+    + (isNum(s.upside_to_hi_pct) ? pct(s.upside_to_hi_pct, true) : '缺失')
+    + ' / Downside ' + (isNum(s.downside_to_lo_pct) ? pct(-Math.abs(s.downside_to_lo_pct)) : '缺失')
+    + ' / Time ' + (isNum(s.days_to_hi) ? '≈ ' + Math.round(s.days_to_hi) + ' 天量级' : '缺失')
+    + ' / Volatility ' + volTxt + '</div>');
+  if(s.days_to_hi_note){
+    out.push('<div class="srr-note">Time 口径：' + esc(s.days_to_hi_note) + '</div>');
+  } else if(!isNum(s.days_to_hi) && s.missing && s.missing.days_to_hi){
+    out.push('<div class="srr-note">Time 缺失：' + esc(s.missing.days_to_hi) + '</div>');
+  }
+  /* ⑤b 参考信息：上市以来最低**只在这里出现**，绝不进上面的 Downside / 结构比算式
+     （新币上市初期几十根都是池子粉尘价，把它当支撑位会算出 −99.99% 这种假跌幅） */
+  if(young && isNum(s.lo_since_listing)){
+    out.push('<div class="srr-note">参考信息（<b>不参与</b>上面的 Downside / 结构比算式）：上市以来最低 '
+      + price(s.lo_since_listing)
+      + (typeof s.lo_since_listing_date === 'string' && s.lo_since_listing_date
+         ? ' · ' + esc(s.lo_since_listing_date) : '')
+      + '（' + esc((s.notes && s.notes.length ? s.notes.join('；')
+                    : '新币早期是池子粉尘价，不能当支撑位')) + '）</div>');
+  }
+  /* ⑥ 最强反方理由（后端按规则挑，条条引用真实数字） */
+  var rs = s.reasons || [];
+  if(!rs.length) rs = ['按现有数据没触发结构性反方项，但这不等于没有风险'];
+  out.push('<div class="srr-reason"><b>最强反方理由</b>'
+    + rs.map(function(t){ return '<span class="li">· ' + esc(t) + '</span>'; }).join('')
+    + '</div>');
+  /* ⑦ 未查 / 口径缺口 */
+  var gp = s.gaps || [];
+  if(gp.length) out.push('<div class="srr-gap">未查：' + gp.map(esc).join('；') + '</div>');
+  out.push('<div class="srr-foot">结构口径，非买卖建议（用户方法论：指标只说明当下在哪，'
+    + '不构成买入信号）。只算查询结果的第 1 条，避免 6 条都拉日线把额度打爆。</div>');
+  return '<div class="srr">' + out.join('') + '</div>';
+}
+
+/* ---------- 带血筹码成本分布（只挂查询结果**第 1 条**卡片下方） ----------
+   点按钮 → POST /api/costbasis/start → 每 3 秒轮询 /api/costbasis/status。
+   后端在内存里跑链上自算 FIFO（结果缓存 15 分钟，不落盘）；前端只负责排版：
+   ⛔ 大字必须带口径（分母写清）；state=error / ok:false → 只显示原因（红字），
+      绝不显示假数字、绝不拿 0 顶缺失。 */
+var cbStore = {};          // q -> {state:'running|done|error', progress, result, why, job_id, timer,
+                           //       ban_until（GMGN 熔断解封时刻，ISO；只是显示用，不发请求）}
+
+function cbQ(){
+  var q = (lastQuery && lastQuery.q) || ($('q-input') ? $('q-input').value : '') || '';
+  return String(q).replace(/^\s+|\s+$/g, '');
+}
+
+/* GMGN 限流熔断：报文里已经给了准确的解封时刻（后端算成 gmgn_ban_until，ISO8601 本机时区）。
+   有它就显示成「GMGN 限流中，预计 HH:MM 恢复」——别把一坨 429 报文糊在面板上。
+   ⚠️ 只排版：熔断期内后端零请求，前端也绝不因为「想看恢复没有」去触发任何 GMGN 请求。 */
+function gmgnBanWhen(iso){
+  var m = /T(\d{2}):(\d{2})/.exec(String(iso == null ? '' : iso));
+  return m ? (m[1] + ':' + m[2]) : '';
+}
+
+function gmgnBanText(iso){
+  var when = gmgnBanWhen(iso);
+  return when ? ('GMGN 限流中，预计 ' + when + ' 恢复')
+              : 'GMGN 限流中（等它解封，期间零请求）';
+}
+
+/* 熔断横幅：**只有「熔断 = 这次算不出来的原因」时才亮**（正常出了数就不刷警告）。
+   ⚠️ 纯排版，不发任何请求；报文原文留在 why / errors 里，想看有。 */
+function cbBanHtml(iso){
+  if(!iso){ return ''; }
+  return '<div class="cb-err cb-ban">' + esc(gmgnBanText(iso))
+       + ' <span class="dim">（用其它源先顶着；熔断期零请求，绝不探测式重试）</span></div>';
+}
+
+/* ---------- 「将要分析：币名 · 链名 · 地址缩写 · 来源」----------
+   起任务**之前**先把解析到的是谁亮出来：解析到仿盘/桥接版时用户当场就能看出来
+   （名字和输入明显不符还有一行「换用合约地址查询更准」），而不是算完一堆数才发现分析错币。 */
+/* 链名 → 人话。bsc 必须在这里：GeckoTerminal /search/pools 的结果行 chain='bsc'
+   （chain_name 缺失时也要能显示成「BSC」，绝不显示成空的或 'bsc'）。 */
+var CB_CHAIN_CN = {ethereum:'以太坊', eth:'以太坊', 'binance-smart-chain':'BSC 币安智能链',
+                   bsc:'BSC', base:'Base', arbitrum:'Arbitrum', polygon:'Polygon',
+                   polygon_pos:'Polygon', optimism:'Optimism', gnosis:'Gnosis', solana:'Solana'};
+
+function cbChainText(c){ return c ? (CB_CHAIN_CN[c] || String(c)) : '—'; }
+
+/* 结果行 → 人话链名（**行里明明有链就绝不许显示 —**）：
+   ① 行里 chain_name（GT / DexScreener / GMGN 都已给）→ 直接用
+   ② 否则 chain / chain_id（如 GT /search/pools 行的 chain='bsc'）→ 查 CB_CHAIN_CN，认不出原样显示
+   ③ 都没有 → ''（调用方自己决定显示「链未知」还是整行不显示） */
+function rowChainText(r){
+  r = r || {};
+  if(r.chain_name) return String(r.chain_name);
+  var c = (r.chain != null && r.chain !== '') ? r.chain : r.chain_id;
+  return (c != null && c !== '') ? cbChainText(c) : '';
+}
+
+function cbAddrShort(a){
+  var s = String(a == null ? '' : a);
+  if(!s){ return '—'; }
+  return s.length <= 16 ? s : (s.slice(0, 8) + '…' + s.slice(-6));
+}
+
+/* 币名归一（只留字母数字 + 中文，小写）：'Baby-Pepe-5' → 'babypepe5' */
+function cbNormName(s){
+  return String(s == null ? '' : s).toLowerCase().replace(/[^0-9a-z\u4e00-\u9fff]+/g, '');
+}
+
+/* 输入和解析出来的**明显不符**？只有「输入 == 解析出的符号或名字」才算相符（输入是地址则不比）。
+   pepe → Pepe(PEPE) ✓；pepe → Baby Pepe(BABYPEPE) ✗（要提示）；eth → WETH ✗（也是真话）。 */
+function cbNameMismatch(q, name, symbol){
+  var raw = String(q == null ? '' : q).replace(/^\s+|\s+$/g, '');
+  if(!raw || /^0x[0-9a-fA-F]{40}$/.test(raw) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(raw)){
+    return false;                                  // 地址查询不做这个比较
+  }
+  var a = cbNormName(raw), n = cbNormName(name), s = cbNormName(symbol);
+  if(!a || (!n && !s)){ return false; }
+  return !(a === n || a === s);
+}
+
+function cbWhoFromResolve(q, p){
+  var name = p.resolved_name || p.symbol || null;
+  return {name: name, symbol: p.symbol || null, chain: p.chain, address: p.address,
+          source: p.source || null,
+          rank: isNum(p.resolved_rank) ? p.resolved_rank : null,
+          liquidity: isNum(p.resolved_liquidity_usd) ? p.resolved_liquidity_usd : null,
+          input: q, mismatch: cbNameMismatch(q, name, p.symbol)};
+}
+
+/* 已在跑 / 已缓存（后端复用任务）→ 只给链+地址+符号，也照样把币名显示出来 */
+function cbWhoFromJob(j){
+  if(!j || !j.chain){ return null; }
+  return {name: j.name || j.symbol || null, symbol: j.symbol || null, chain: j.chain,
+          address: j.address || null, source: j.cached ? '服务内存缓存（已算过）' : null,
+          rank: null, liquidity: null, input: null, mismatch: false};
+}
+
+function cbWhoOf(st){
+  if(!st){ return null; }
+  if(st.who){ return st.who; }
+  var t = (st.result && st.result.token) || null;
+  if(t && (t.symbol || t.address)){
+    return {name: t.name || t.symbol || null, symbol: t.symbol || null, chain: t.chain,
+            address: t.address || null, source: '结果快照', rank: null, liquidity: null,
+            input: null, mismatch: false};
+  }
+  return null;
+}
+
+function cbWhoHtml(st){
+  var w = cbWhoOf(st);
+  if(!w){ return ''; }
+  /* 币名和符号都亮出来（名字是 Baby Pepe 而符号是 BABYPEPE 时，一眼就能看出「不是这个」） */
+  var title = w.name || w.symbol || '—';
+  if(w.name && w.symbol && cbNormName(w.name) !== cbNormName(w.symbol)){
+    title += '（' + w.symbol + '）';
+  }
+  var line = [esc(title), esc(cbChainText(w.chain)),
+              esc(cbAddrShort(w.address)), '来源 ' + esc(w.source || '未标注')].join(' · ');
+  var det = [];
+  if(isNum(w.rank)){ det.push('市值排名 #' + w.rank); }
+  if(isNum(w.liquidity)){ det.push('池子流动性 ' + money(w.liquidity)); }
+  var out = '<div class="cb-who"><div class="cb-who-k">将要分析</div>'
+    + '<div class="cb-who-v">' + line + '</div>';
+  if(det.length){ out += '<div class="cb-who-d">' + esc(det.join(' · ')) + '</div>'; }
+  if(w.mismatch){
+    out += '<div class="cb-who-hint">不是这个？换用合约地址查询更准（输入「'
+      + esc(String(w.input || '')) + '」解析到的是「' + esc(String(w.name || w.symbol || '—'))
+      + '」）</div>';
+  }
+  return out + '</div>';
+}
+
+/* 任务快照 → 补齐 who（已经在跑/已缓存的：后端只回 chain/address/name，够显示币名了） */
+function cbMergeJob(cur, j){
+  if(!cur || !j){ return; }
+  if(!cur.who){ cur.who = cbWhoFromJob(j); }
+  if(j.gmgn_ban_until){ cur.ban_until = j.gmgn_ban_until; }   /* 熔断中：横幅用（纯显示，不发请求） */
+}
+
+function cbCell(k, vHtml, dHtml){
+  return '<div class="cb-cell"><div class="k">' + k + '</div>'
+       + '<div class="v">' + vHtml + '</div>'
+       + (dHtml ? '<div class="d">' + dHtml + '</div>' : '') + '</div>';
+}
+
+/* 缺失原因：优先用后端 errors，其次指向 caveats；绝不编一个 0 */
+function cbWhy(res){
+  var errs = (res && res.errors) || [];
+  if(errs.length) return '本次没算出来：' + esc(errs.slice(0, 2).join('；'));
+  return '本次没算出来（见下面 caveats / 明细）';
+}
+
+function cbResultHtml(res){
+  res = res || {};
+  var agg = res.aggregate || {}, cov = res.coverage || {}, tok = res.token || {};
+  if(!agg || typeof agg !== 'object' || !Object.keys(agg).length){
+    return '<div class="cb-err">' + cbWhy(res) + '</div>';
+  }
+  var out = ['<div class="cb-wrap">'];
+  /* ① 最大字号：水下筹码占比（分母口径必须跟着） */
+  if(isNum(agg.underwater_pct)){
+    out.push('<div class="cb-hero"><div class="k">水下筹码占比（成本价 &gt; 现价的量）</div>'
+      + '<div class="v">' + pct(agg.underwater_pct) + '</div>'
+      + '<div class="d">口径：分母 = ' + esc(agg.underwater_pct_denominator || '有成本的量')
+      + '；现价 ' + price(agg.price_now)
+      + (isNum(agg.weighted_avg_cost) ? ' · 平均成本 ' + price(agg.weighted_avg_cost) : '')
+      + '</div></div>');
+  } else {
+    out.push('<div class="cb-hero"><div class="k">水下筹码占比（成本价 &gt; 现价的量）</div>'
+      + '<div class="v">缺失</div><div class="d">' + cbWhy(res) + '</div></div>');
+  }
+  /* ② 加权平均成本 */
+  out.push(cbCell('加权平均成本', price(agg.weighted_avg_cost),
+    isNum(agg.weighted_avg_cost)
+      ? '口径：只用「有成本的量」加权（' + esc(String(agg.known_cost_amount == null ? '—' : agg.known_cost_amount))
+        + '），未知成本不混进来'
+      : cbWhy(res)));
+  /* ③ 现价 vs 平均成本 */
+  out.push(cbCell('现价 vs 平均成本',
+    isNum(agg.price_vs_avg_cost_pct) ? pct(agg.price_vs_avg_cost_pct, true) : '缺失',
+    isNum(agg.price_vs_avg_cost_pct)
+      ? ('负 = 现价在平均成本之下 · 现价 ' + price(agg.price_now))
+      : cbWhy(res)));
+  /* ④ 进汇总 M/N 户 */
+  var inc = isNum(cov.holders_included_in_aggregate) ? cov.holders_included_in_aggregate : null;
+  var fet = isNum(cov.holders_fetched) ? cov.holders_fetched
+          : (isNum(cov.holders_requested) ? cov.holders_requested : null);
+  out.push(cbCell('进汇总',
+    (inc === null || fet === null) ? '缺失' : (inc + ' / ' + fet + ' 户'),
+    (inc === null || fet === null) ? cbWhy(res)
+      : '只有转账历史完整的大户进汇总，其余只出明细'));
+  /* ⑤ 覆盖率：前 N 大占总量（GMGN 口径：分母 = Σ amount_percentage，不是 total_supply） */
+  var nth = isNum(cov.holders_requested) ? cov.holders_requested : null;
+  out.push(cbCell('覆盖率：前 ' + (nth === null ? 'N' : nth) + ' 大占总量',
+    isNum(cov.holders_pct_of_total_supply) ? pct(cov.holders_pct_of_total_supply) : '缺失',
+    isNum(cov.holders_pct_of_total_supply)
+      ? (cov.holders_pct_of_total_supply_source
+         ? ('口径：' + esc(String(cov.holders_pct_of_total_supply_source)))
+         : ('口径：分母 = total_supply（' + esc(String(cov.total_supply_ui == null ? '—' : cov.total_supply_ui))
+            + '）'))
+      : cbWhy(res)));
+  /* ⑥ 未知成本占比 */
+  out.push(cbCell('未知成本占比',
+    isNum(agg.unknown_cost_pct) ? pct(agg.unknown_cost_pct) : '缺失',
+    isNum(agg.unknown_cost_pct)
+      ? ('口径：分母 = ' + esc(agg.unknown_cost_pct_denominator || '被分析量'))
+      : cbWhy(res)));
+  out.push('</div>');
+  /* ⑦ 分桶（flex-wrap，手机不横滚）
+        链上自算口径 = 成本倍数四桶；GMGN 第三方口径 = 按 unrealized_pnl 五桶（后端给 buckets_labels） */
+  var b = agg.buckets || {};
+  var legacyKeys = ['<0.5x', '0.5-1x', '1-2x', '>2x'];
+  var labels = (agg.buckets_labels && agg.buckets_labels.length) ? agg.buckets_labels : legacyKeys;
+  var pnlBasis = String(agg.buckets_basis || '') === 'unrealized_pnl';
+  if(pnlBasis && agg.buckets_labels && agg.buckets_amounts){
+    var amounts = agg.buckets_amounts;
+    labels = [];
+    for(var j=0;j<agg.buckets_labels.length;j++){ labels.push(agg.buckets_labels[j]); }
+  }
+  out.push('<div class="cb-wrap">');
+  out.push('<div class="cb-cell" style="flex:1 1 100%">'
+    + '<div class="k">' + (pnlBasis ? '盈亏分桶（按 unrealized_pnl，第三方口径）'
+                                     : '成本分桶（倍数 = 批次成本价 ÷ 现价）') + '</div>'
+    + '<div class="d">口径：分母 = ' + esc(agg.buckets_denominator || '有成本的量') + '</div></div>');
+  for(var i=0;i<labels.length;i++){
+    var k = labels[i];
+    var sub = (pnlBasis && agg.buckets_amounts && agg.buckets_amounts[k] != null)
+            ? '<div class="d">量 ' + esc(String(agg.buckets_amounts[k])) + '</div>' : '';
+    out.push('<div class="cb-cell"><div class="k">' + esc(k) + '</div>'
+      + '<div class="v">' + (isNum(b[k]) ? pct(b[k]) : '缺失') + '</div>' + sub + '</div>');
+  }
+  out.push('</div>');
+  /* ⑦b 大户标签分布（GMGN 口径才有）：交易所 / bundler / sniper / 新钱包 */
+  if(isNum(agg.exchange_held_pct) || isNum(agg.bundler_pct) || isNum(agg.sniper_pct)
+     || isNum(agg.fresh_wallet_pct)){
+    var tagDefs = [['交易所地址持仓', agg.exchange_held_pct, agg.exchange_wallets],
+                   ['bundler', agg.bundler_pct, agg.bundler_wallets],
+                   ['sniper', agg.sniper_pct, agg.sniper_wallets],
+                   ['新钱包', agg.fresh_wallet_pct, agg.fresh_wallets]];
+    out.push('<div class="cb-wrap">');
+    out.push('<div class="cb-cell" style="flex:1 1 100%"><div class="k">大户标签分布（GMGN 标签）</div>'
+      + '<div class="d">口径：分母 = ' + esc(agg.tags_pct_denominator || '本次拿到的大户持仓量合计')
+      + '；交易所持仓 ≠ 长期持有（CEX 钱包里的币属于用户，随时可能被提走/抛售）</div></div>');
+    for(var t=0;t<tagDefs.length;t++){
+      var tv = tagDefs[t][1], tn = tagDefs[t][2];
+      out.push('<div class="cb-cell"><div class="k">' + esc(tagDefs[t][0]) + '</div>'
+        + '<div class="v">' + (isNum(tv) ? pct(tv) : '缺失') + '</div>'
+        + (isNum(tn) ? '<div class="d">' + tn + ' 个地址</div>' : '') + '</div>');
+    }
+    out.push('</div>');
+  }
+  /* ⑧ 口径与 caveats：每条小字灰字 */
+  var cav = res.caveats || [];
+  out.push('<div class="cb-cav"><div class="cb-sub">口径与未覆盖（照抄后端，一条不改）：</div>'
+    + cav.map(function(t){ return '<span class="li">· ' + esc(t) + '</span>'; }).join('')
+    + '</div>');
+  out.push('<div class="cb-foot">来源：' + esc(String((res.price || {}).source || '链上自算'))
+    + ' · 快照 ' + esc(String(res.generated_at || '—'))
+    + ' · ' + esc(String(tok.symbol || '—')) + ' ' + esc(String(tok.chain || res.chain || ''))
+    + ' · 结果只在服务内存里留 15 分钟（不落盘）</div>');
+  return out.join('');
+}
+
+function cbInnerHtml(){
+  var q = cbQ(), st = cbStore[q];
+  var cbAgg = (st && st.result && st.result.aggregate) || {};
+  var head = '<div class="cb-h">带血筹码成本分布 · '
+           + (String(cbAgg.source || '').indexOf('GMGN') >= 0
+              ? 'GMGN 第三方口径' : '链上自算 FIFO')
+           + ' · 非买卖建议</div>';
+  var btn;
+  if(st && st.state === 'resolving'){
+    btn = '<button type="button" class="srr-btn cb-btn" disabled data-q="' + esc(q) + '">'
+        + '正在解析这个币…</button>';
+  } else if(st && st.state === 'running'){
+    btn = '<button type="button" class="srr-btn cb-btn" disabled data-q="' + esc(q) + '">'
+        + '算着…（每 3 秒刷新进度）</button>';
+  } else if(st && st.state === 'done'){
+    btn = '<button type="button" class="srr-btn cb-btn ghost" data-q="' + esc(q) + '">'
+        + '带血筹码（已算过，内存里留 15 分钟）</button>';
+  } else {
+    btn = '<button type="button" class="srr-btn cb-btn" data-q="' + esc(q) + '">'
+        + '算这个币的带血筹码</button>';
+  }
+  var who = cbWhoHtml(st);            // 「将要分析：币名 · 链 · 地址缩写 · 来源」大字（起任务前就有）
+  var body;
+  if(st && st.state === 'done'){
+    var agg0 = st.result && st.result.aggregate;
+    var empty0 = (!agg0 || typeof agg0 !== 'object' || !Object.keys(agg0).length);
+    body = who + (empty0 ? cbBanHtml(st.ban_until) : '') + cbResultHtml(st.result);
+  } else if(st && st.state === 'error'){
+    /* GMGN 熔断不是「这个币算不出来」：先把限流恢复时刻说清楚（报文原文仍留在 why 里） */
+    body = cbBanHtml(st.ban_until)
+         + '<div class="cb-err">算不出来：' + esc(st.why || '未知原因') + '</div>';
+  } else if(st && st.state === 'resolving'){
+    body = who + '<div class="cb-status">' + esc(st.progress || '解析中…')
+         + ' <span class="dim">（先解析币名 → 链 + 合约地址，解析结果会先显示出来再起任务）</span></div>';
+  } else if(st && st.state === 'running'){
+    body = who + '<div class="cb-status">' + esc(st.progress || '跑着…')
+         + ' <span class="dim">（后台在跑，别关页面；每 3 秒刷一次）</span></div>';
+  } else {
+    body = '<div class="cb-sub">点一下先解析「币名 → 链 + 合约地址」（复用面板查询排序：市值排名 + '
+         + '桥接/包装版垫底），先把「将要分析」的币名和地址亮出来，再起任务。'
+         + '然后看前 N 大地址的链上转账，自算 FIFO 成本分布（分母逐项写清）。'
+         + '拿不到就写「缺失」，绝不估算、绝不拿 0 顶。'
+         + '点击后才去拉链上数据（默认前 20 大地址，约 2-4 分钟；结果只在服务内存里留 15 分钟）。</div>';
+  }
+  return head + btn + body;
+}
+
+function cbBlockHtml(){ return '<div class="cb">' + cbInnerHtml() + '</div>'; }
+
+/* 只重画这一块（30 秒自动刷新 / 加观察池重绘查询结果后，块里的内容照样还原） */
+function cbPaint(){
+  var l = $('q-list');
+  if(!l || !l.querySelectorAll){ return; }
+  var boxes = l.querySelectorAll('.cb');
+  if(!boxes || !boxes.length){ return; }
+  boxes[0].innerHTML = cbInnerHtml();
+}
+
+function cbFail(q, why, banUntil){
+  var st = cbStore[q] || {};
+  if(st.timer){ clearInterval(st.timer); }
+  cbStore[q] = {state:'error', why: (why || '未知原因'), progress:'', result:null,
+                job_id: st.job_id || null, timer:null,
+                ban_until: (banUntil || st.ban_until || null)};
+  cbPaint();
+}
+
+function cbPoll(q){
+  var st = cbStore[q];
+  if(!st || st.state !== 'running' || !st.job_id){ return; }
+  if(st.polling){ return; }     // 上一次 poll 还没回来 → 别把请求越堆越多（重试可能拖 100s+）
+  st.polling = true;
+  fetchJSON('/api/costbasis/status?job_id=' + encodeURIComponent(st.job_id))
+    .then(function(x){
+      var j = x || {}, cur = cbStore[q];
+      if(!cur || cur.job_id !== st.job_id || cur.state !== 'running'){ return; }
+      if(j.state === 'done' && j.result){
+        if(cur.timer){ clearInterval(cur.timer); }
+        cur.timer = null; cur.state = 'done'; cur.result = j.result; cur.why = null;
+        cur.progress = j.progress || '完成';
+        cbMergeJob(cur, j);
+        cbPaint();
+        return;
+      }
+      if(j.state === 'error' || j.ok === false){
+        cbFail(q, j.why || j.error || '状态接口说算不出来', j.gmgn_ban_until);
+        return;
+      }
+      cbMergeJob(cur, j);
+      cur.progress = j.progress || cur.progress || '跑着…';
+      cbPaint();
+    })
+    .catch(function(){ /* 轮询失败继续试（网络抖一下不许把结果判死） */ })
+    .then(function(){ st.polling = false; });
+}
+
+function cbStart(q){
+  /* 一律以当前查询词为准（按钮上的 data-q 只是标注；属性里的 HTML 实体解码不该影响 POST 的 q） */
+  q = String(cbQ() || q || '').replace(/^\s+|\s+$/g, '');
+  if(!q){ return; }
+  var st = cbStore[q];
+  if(st && (st.state === 'running' || st.state === 'resolving')){ return; }   // 已经在跑/正在解析：别重复开
+  if(st && st.state === 'done'){ cbPaint(); return; }     // 已算过（内存缓存命中）：直接渲染，不重复请求
+  /* ① 先解析（不改币：这一步的结果会**先显示出来**，解析失败就不起任务、不显示任何数字） */
+  cbStore[q] = {state:'resolving', progress:'解析这个币（复用面板查询排序找链 + 合约地址）…',
+                who:null, result:null, why:null, job_id:null, timer:null};
+  cbPaint();
+  cbResolve(q);
+}
+
+function cbResolve(q){
+  fetchJSON('/api/costbasis/resolve?q=' + encodeURIComponent(q))
+    .then(function(p){
+      var cur = cbStore[q];
+      if(!cur || cur.state !== 'resolving'){ return; }
+      p = p || {};
+      if(p.ok === false || !p.chain || !p.address){
+        cbFail(q, p.why || p.error || '解析不出链和合约地址（拿不到受支持链上的合约地址）',
+               p.gmgn_ban_until);
+        return;
+      }
+      cur.who = cbWhoFromResolve(q, p);
+      cur.progress = '解析完成，起任务…';
+      cbPaint();                                   // ←「将要分析：币名 · 链 · 地址缩写 · 来源」先亮出来
+      cbPostStart(q, p);                           // 再自动起任务
+    })
+    .catch(function(err){ cbFail(q, '解析失败：' + String((err && err.message) || err)); });
+}
+
+function cbPostStart(q, p){
+  /* 会改状态的 POST：只在**网络层失败**（连不上 / 超时 / 非 JSON）时重试，最多 2 次
+     —— 避免 CF 抖一下就把同一个任务起两遍（HTTP 4xx 业务拒绝一律不重试） */
+  fetchJSON('/api/costbasis/start', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    /* 把刚解析出的 chain/address 一并带上：分析的就是**刚才显示出来的那个币**（不会又解析成别的） */
+    body: JSON.stringify({q: q, chain: p.chain, address: p.address,
+                          symbol: p.symbol || null, name: p.resolved_name || null}),
+    netOnly: true, tries: Q_POST_MAX_TRIES, warnLabel: '起任务'
+  }).then(function(x){
+    var j = x || {}, cur = cbStore[q];
+    if(!cur || cur.state !== 'resolving'){ return; }
+    if(j.ok === false || !j.job_id || j.error){
+      cbFail(q, j.why || j.error || '起任务失败', j.gmgn_ban_until);
+      return;
+    }
+    cur.job_id = j.job_id;
+    cur.chain = j.chain || null; cur.address = j.address || null;
+    cbMergeJob(cur, j);
+    if(j.state === 'done' && j.result){                   // 后端缓存命中 → 直接渲染
+      cur.state = 'done'; cur.result = j.result; cur.progress = j.progress || '完成';
+      cbPaint();
+      return;
+    }
+    cur.state = 'running';
+    cur.progress = j.progress || '跑着…';
+    cbPaint();
+    cur.timer = setInterval(function(){ cbPoll(q); }, 3000);   // 每 3 秒轮询一次
+  }).catch(function(err){
+    cbFail(q, String((err && err.message) || err));
+  });
+}
+
+/* 「这一行是不是合约地址查询来的」：有池子字段就是（链/池地址/建池时间/流动性） */
+function isPoolRow(r){
+  return !!(r && (r.chain_id || r.chain || r.pair_address ||
+                  r.pool_created_at != null || r.pair_created_at != null ||
+                  isNum(r.liquidity_usd)));
+}
+
+/* 合约地址卡（手机优先大字）：链名徽章 + 价 + 流动性 + 24h量 + 24h涨跌 + 建池日期 + 源标签。
+   缺的一律 —（原因见 null_fields），绝不显示 0。 */
+function poolBlock(r){
+  if(!isPoolRow(r)) return '';
+  function qb(k, v){
+    return '<div class="qb"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>';
+  }
+  var created = (r.pool_created_at != null) ? r.pool_created_at : r.pair_created_at;
+  var vol = isNum(r.volume_24h) ? r.volume_24h : r.vol24h_usd;
+  return '<div class="qpool">'
+    + '<div class="qp-h">交易池 · ' + esc(rowChainText(r) || '链未知')
+      + ' · 源:' + esc(srcText(r.source, r.source_age_s)) + '</div>'
+    + '<div class="qbig">'
+    + qb('价', '<span class="mono">' + price(r.price_usd) + '</span>')
+    + qb('流动性', '<span class="mono">' + money(r.liquidity_usd) + '</span>')
+    + qb('24h量', '<span class="mono">' + money(vol) + '</span>')
+    + qb('24h涨跌', isNum(r.price_change_24h)
+         ? '<span class="mono ' + cls(r.price_change_24h) + '">' + pct(r.price_change_24h, true) + '</span>'
+         : '<span class="mono">—</span>')
+    + qb('建池日期', '<span class="mono">' + dateText(created) + '</span>')
+    + '</div></div>';
+}
+
+function qCard(r, i){
+  var out = '<div class="qcard' + (r.in_candidates ? ' in-cand' : '') + '">'
+    + '<div class="qhead"><span class="qsym">' + esc(r.symbol == null ? '—' : r.symbol) + '</span>'
+    + (r.name ? '<span class="qname">' + esc(r.name) + '</span>' : '')
+    + (isNum(r.market_cap_rank) ? '<span class="qrank">#' + r.market_cap_rank + '</span>' : '')
+    + srcTag(r.source, r.source_age_s)
+    + '</div>';
+  var bg = [];
+  /* 链名徽章：chain_name 优先，没有就按 chain / chain_id 查表（bsc → BSC）——
+     行里明明有链就绝不许不显示。 */
+  if(rowChainText(r)) bg.push('<span class="badge chain">链 ' + esc(rowChainText(r)) + '</span>');
+  if(r.in_candidates) bg.push('<span class="badge cand">在候选池</span>');
+  if(r.in_watchlist) bg.push('<span class="badge mine">已在我的池子</span>');
+  if(bg.length) out += '<div class="qbadges">' + bg.join('') + '</div>';
+  out += '<div class="qscore"><span class="lbl">错杀分</span>'
+       + '<span class="val ' + (isNum(r.screen_score) ? 'score' : 'dim') + '">'
+       + (isNum(r.screen_score) ? r.screen_score.toFixed(4) : '—') + '</span>'
+       + '<span class="ath">距ATH <b class="dd">' + dd(r.drawdown_from_ath_pct) + '</b></span></div>';
+  function qb(k, v){ return '<div class="qb"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>'; }
+  /* 地址卡：交易池块**放在最上面**（手机一屏就能看到价 / 流动性 / 24h量 / 24h涨跌 / 建池日期），
+     通用数值网格跟在后面（池子没有 7d/30d/1y 就老实显示 —）。 */
+  out += poolBlock(r);
+  out += '<div class="qbig">'
+       + qb('现价', '<span class="mono">' + price(r.price_usd) + '</span>')
+       + qb('市值', '<span class="mono">' + money(r.mcap_usd) + '</span>')
+       + qb('24h量', '<span class="mono">' + money(r.vol24h_usd) + '</span>')
+       + qb('TVL', '<span class="mono">' + money(r.tvl_usd) + '</span>')
+       + qb('TVL/市值', '<span class="mono">' + (isNum(r.tvl_mcap_ratio) ? r.tvl_mcap_ratio.toFixed(2) : '—') + '</span>')
+       + qb('7d', span(r.ret_7d_pct, function(v){ return pct(v, true); }))
+       + qb('30d', span(r.ret_30d_pct, function(v){ return pct(v, true); }))
+       + qb('1y', span(r.ret_1y_pct, function(v){ return pct(v, true); }))
+       + '</div>';
+  var sub = [];
+  /* 源自己给的命中说明（GMGN search：地址与查询完全一致 + 流动性 / 市值 / 是否蜜罐）
+     —— 蜜罐警告必须看得见，别只藏在 JSON 里 */
+  if(r.why) sub.push(esc(r.why));
+  if(r.category) sub.push('类别 ' + esc(r.category));
+  if(chainText(r.chains) !== '—') sub.push('链 ' + esc(chainText(r.chains)));
+  else if(rowChainText(r)) sub.push('链 ' + esc(rowChainText(r)));
+  if(r.dex_id) sub.push('DEX ' + esc(r.dex_id));
+  if(isNum(r.liquidity_usd)) sub.push('流动性 ' + money(r.liquidity_usd));
+  if(isNum(r.price_change_24h)) sub.push('24h ' + esc(pct(r.price_change_24h, true)));
+  if(sub.length) out += '<div class="qsub">' + sub.join(' · ') + '</div>';
+  out += nullFieldsHtml(r, isPoolRow(r) ? 6 : 3);
+  out += '<div class="qact"><button type="button" class="q-pool-btn '
+       + (r.in_watchlist ? 'danger' : 'primary') + '" data-i="' + i + '">'
+       + (r.in_watchlist ? '移出观察池' : '加入观察池') + '</button>'
+       + '<span class="note-line q-pool-msg"></span></div>';
+  return out + '</div>';
+}
+
+function renderQuery(){
+  var p = lastQuery || {results: []};
+  var rows = p.results || [];
+  var el = $('q-list');
+  renderQSummary(rows);
+  if(!el) return;
+  if(!rows.length){ el.innerHTML = ''; return; }
+  var out = [];
+  for(var i=0;i<rows.length;i++){
+    out.push(qCard(rows[i] || {}, i));
+    /* 结构盈亏比只挂**第 1 条**（后端也只给第 1 条算；其余 5 条保持现状） */
+    if(i === 0 && rows[0] && rows[0].struct_rr) out.push(structHtml(rows[0].struct_rr));
+    /* 带血筹码成本分布：也只挂第 1 条（点按钮才去算；第 2~6 条不给按钮） */
+    if(i === 0) out.push(cbBlockHtml());
+  }
+  el.innerHTML = out.join('');
+}
+
+function renderLookup(p){
+  lastQuery = p;
+  qSel = null;
+  var rows = p.results || [];
+  setUpstream(p);
+  /* GMGN 限流中（后端给了解封时刻）→ 状态行先亮「GMGN 限流中，预计 HH:MM 恢复」，
+     别只把一坨 429 报文当 missing 甩出来；其它源正常时照样出结果，不因此报错。 */
+  var ban = p.gmgn_ban_until ? (gmgnBanText(p.gmgn_ban_until) + ' · ') : '';
+  if(!rows.length){
+    var el0 = $('q-list'); if(el0) el0.innerHTML = '';
+    setQSummary('');                         // 没结果就没有汇总可算
+    var ms0 = p.missing || [];
+    if(ms0.length){
+      /* 网络 / 代理整段断掉也是 0 条：先把原因说清楚（别让用户以为「查不到这个币」）。
+         missing 每条都带「源名（错误类型）」；尾上那句「建议：…」再挤也一定要显示出来。 */
+      var lines = ms0.slice(0, 3);
+      var tail = ms0[ms0.length - 1];
+      if(tail && tail.indexOf('建议：') === 0 && lines.indexOf(tail) < 0) lines.push(tail);
+      setQStatus(ban + '没查到「' + esc(p.q) + '」——' + esc(lines.join('，')), 'q-warn');
+      return;
+    }
+    if(p.mode === 'address'){
+      setQStatus(ban + '没找到「' + esc(p.q) + '」——GeckoTerminal 逐链没有这个地址的池子，'
+                 + 'DexScreener / CoinGecko 也都没给（不猜）', ban ? 'q-warn' : '');
+    } else {
+      setQStatus(ban + '没找到「' + esc(p.q) + '」——CoinGecko / CoinPaprika 都没搜到（中文也能搜，'
+                 + '比如「币安」）；也可以直接粘合约地址', ban ? 'q-warn' : '');
+    }
+    return;
+  }
+  var ms = p.missing || [];
+  setQStatus(ban + '查到 ' + rows.length + ' 条 · '
+             + (p.mode === 'address' ? '合约地址' : '关键词') + '检索 · '
+             + esc(p.ts || '')
+             + (ms.length ? ' · 部分数据缺失：' + esc(ms.slice(0,3).join('，')) : ''),
+             (ms.length || ban) ? 'q-warn' : '');
+  renderQuery();
+}
+
+/* 失败原因 + 是否值得自动重试（隧道抖动 / 面板正在重启都值得再试一次） */
+function qErr(msg, retry, http, body, kind){
+  var e = new Error(msg);
+  e.q_retry = !!retry;
+  e.q_http = (http === undefined ? null : http);
+  e.q_body = String(body == null ? '' : body);
+  e.q_kind = kind || (retry ? 'net' : 'biz');
+  return e;
+}
+
+/* 响应片段：压成一行，最多 n 字（状态行的第一句要能一眼看懂） */
+function qSnippet(txt, n){
+  var s = String(txt == null ? '' : txt).replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+/* ---------------------- 统一出口 fetchJSON（所有 /api/* 都从这里走） ----------------------
+   真机证据（2026-09-16 01:0x，同一条 CF 免费 quick tunnel）：curl --noproxy '*' -m 20 连打
+   /api/brief，http2 12 次 → 5 成功 / 7 挂死（000，20s 超时）；换 QUIC 还是 5/7；cloudflared
+   日志 "Incoming request ended abruptly: context canceled" ×N；本地 127.0.0.1:8767 同一组端点
+   10/10 全 200、亚毫秒。→ 面板本身健康，是 CF 免费隧道从本机出去随机丢约一半请求。重启治不了
+   丢包（只会让链接一直变），只能靠客户端重试把可用性拉回来。 */
+
+/* 可重试判定（GET）：网络错误 / 超时 / HTTP 5xx·0 / 响应不是 JSON（含 CF 错误页）。
+   业务拒绝（4xx 带人话 error，如「GMGN 限流中」）不重试 —— 重试只会白打上游配额。 */
+function qRetryable(err){
+  if(!err){ return false; }
+  if(err.q_kind === 'timeout' || err.q_kind === 'net' || err.q_kind === 'nonjson'){ return true; }
+  var h = err.q_http;
+  if(h === null || h === undefined){ return false; }
+  return h === 0 || h >= 500;
+}
+/* 网络层失败（连不上 / 超时 / 非 JSON）：会改状态的 POST 只在这类失败时重试 */
+function qNetRetryable(err){
+  return !!(err && (err.q_kind === 'timeout' || err.q_kind === 'net' || err.q_kind === 'nonjson'));
+}
+
+function qSleep(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
+
+/* 失败行（人话，查询状态行与顶部横幅共用一套口径）：
+   「（已重试 3 次）：服务返回的不是 JSON（HTTP 502，前 80 字：…）…」——带尝试次数 + HTTP 状态 */
+function qFailLine(err){
+  var msg = String((err && err.message) || err);
+  var http = err ? err.q_http : null;
+  var attempted = (err && err.q_attempts) ? err.q_attempts : 1;
+  var head = attempted > 1 ? ('已重试 ' + attempted + ' 次') : '未重试';
+  if(http !== null && http !== undefined && msg.indexOf('HTTP ') < 0){ msg += '（HTTP ' + http + '）'; }
+  return '（' + head + '）：' + msg;
+}
+
+/* 一次尝试：AbortController + Q_TIMEOUT_MS 超时；先把响应当**文本**读下来，再自己 JSON.parse。
+   —— 绝不把 WebKit 在 resp.json() 解析失败时抛的原文（「The string did not match the
+      expected pattern.」）糊到状态行上：隧道把 502 / 错误页回给浏览器时就是它。 */
+function fetchOnce(url, opts){
+  opts = opts || {};
+  var ctl = null, timer = null;
+  function stop(){ if(timer){ clearTimeout(timer); timer = null; } }
+  if(typeof AbortController === 'function'){
+    try{ ctl = new AbortController(); }catch(e){ ctl = null; }
+    if(ctl){ timer = setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, Q_TIMEOUT_MS); }
+  }
+  var fo = {cache:'no-store'};
+  if(opts.method){ fo.method = opts.method; }
+  if(opts.headers){ fo.headers = opts.headers; }
+  if(opts.body !== undefined){ fo.body = opts.body; }
+  if(ctl){ fo.signal = ctl.signal; }
+  return fetch(url, fo).then(function(resp){
+    var got = resp.text ? resp.text() : Promise.resolve('');
+    return got.then(function(t){ return {resp: resp, txt: String(t == null ? '' : t)}; },
+                    function(e){                 // 超时中断：别把「空响应」当非 JSON 报出去
+                      if(ctl && ctl.signal && ctl.signal.aborted){ throw e; }
+                      return {resp: resp, txt: ''};
+                    });
+  }).then(function(x){
+    stop();
+    var status = x.resp.status;
+    var ctype = '';
+    try{
+      ctype = String((x.resp.headers && x.resp.headers.get
+                      && x.resp.headers.get('content-type')) || '');
+    }catch(e){ ctype = ''; }
+    var body = null, parsed = false;
+    if(ctype.toLowerCase().indexOf('json') >= 0){
+      try{ body = JSON.parse(x.txt); parsed = true; }catch(e){ parsed = false; }
+    }
+    /* Content-Type 不含 json 或 JSON.parse 失败：HTTP 200 也可能是隧道/网关的错误页 */
+    if(!parsed){
+      throw qErr('服务返回的不是 JSON（HTTP ' + status + '，前 80 字：'
+                 + qSnippet(x.txt, 80) + '）—— 面板可能正在重启或隧道中断',
+                 true, status, x.txt, 'nonjson');
+    }
+    if(!x.resp.ok){
+      /* 非 2xx：先吃后端给人话的 error（如「GMGN 限流中，预计 HH:MM 恢复」），读不到再退回 HTTP 码 */
+      if(body && typeof body === 'object' && body.error){
+        throw qErr(String(body.error), false, status, x.txt, 'biz');
+      }
+      throw qErr('HTTP ' + status + (x.resp.statusText ? ' ' + x.resp.statusText : ''),
+                 false, status, x.txt, 'http');
+    }
+    if(body && typeof body === 'object' && body.error){
+      throw qErr(String(body.error), false, status, x.txt, 'biz');
+    }
+    return body;
+  }).catch(function(err){
+    stop();
+    if(err && err.q_kind !== undefined){ throw err; }      // 自己抛的（已经带人话）
+    var aborted = !!(ctl && ctl.signal && ctl.signal.aborted);
+    if(aborted || (err && err.name === 'AbortError')){
+      throw qErr('查询超时（' + Math.round(Q_TIMEOUT_MS / 1000) + 's）—— 上游还在跑，稍后再点一次',
+                 true, null, 'client timeout', 'timeout');
+    }
+    throw qErr('请求发不出去（' + qSnippet((err && err.message) || err, 80) + '）',
+               true, null, (err && err.message) || err, 'net');
+  });
+}
+
+/* 统一出口：GET 默认 3 次尝试（第 1 次失败等 800ms、第 2 次失败等 1500ms）。
+   opts.tries    覆盖尝试次数
+   opts.netOnly  只重试网络层失败（连不上 / 超时 / 非 JSON）—— 会改状态的 POST（起任务）用
+   opts.onRetry  每次重试前回调 {attempt, tries, wait, error}，好让状态行写「重试中…」 */
+function fetchJSON(url, opts){
+  opts = opts || {};
+  var tries = opts.tries > 0 ? opts.tries : Q_MAX_TRIES;
+  var attempt = 0;
+  function go(){
+    attempt++;
+    return fetchOnce(url, opts).catch(function(err){
+      var canRetry = (opts.netOnly ? qNetRetryable(err) : qRetryable(err)) && attempt < tries;
+      var wait = Q_RETRY_WAITS_MS[Math.min(attempt - 1, Q_RETRY_WAITS_MS.length - 1)];
+      /* 每次都记一条 console.warn（第几次尝试 / HTTP 状态 / 响应前 200 字）——手机连数据线时能查 */
+      try{
+        console.warn('[api] 第 ' + attempt + '/' + tries + ' 次失败：HTTP '
+                     + (err && err.q_http !== null && err.q_http !== undefined ? err.q_http : '—')
+                     + ' · ' + url + ' · ' + String((err && err.message) || err)
+                     + ' · 响应前 200 字：' + qSnippet(err && err.q_body, 200));
+      }catch(e){}
+      err.q_attempts = attempt;
+      err.q_more = canRetry;
+      if(!canRetry){ throw err; }
+      if(typeof opts.onRetry === 'function'){
+        try{ opts.onRetry({attempt: attempt, tries: tries, wait: wait, error: err}); }catch(e){}
+      }
+      return qSleep(wait).then(go);
+    });
+  }
+  return go();
+}
+
+function doLookup(){
+  var q = ($('q-input').value || '').replace(/^\s+|\s+$/g, '');
+  if(!q){ $('q-input').focus(); return; }
+  setQBtn(true);
+  setQStatus('查询中…', '');
+  setQSummary('');                           // 换词重查：先把上一份汇总清掉
+  fetchJSON('/api/lookup?q=' + encodeURIComponent(q), {
+    onRetry: function(info){
+      /* 隧道抖一下就重试：状态行说清是第几次、多久后再试（别让用户对着「查询中…」干等） */
+      setQStatus('查询失败（第 ' + info.attempt + '/' + info.tries + ' 次）：'
+                 + esc(String((info.error && info.error.message) || info.error))
+                 + '，' + (info.wait / 1000) + ' 秒后自动重试', 'q-warn');
+    }
+  }).then(function(p){
+    setQBtn(false);
+    renderLookup(p);
+  }).catch(function(err){
+    setQBtn(false);
+    setQSummary('');
+    /* 全部失败 → 保留上次结果（列表 DOM 一点不动）；状态行写人话，绝不出现 WebKit 原文 */
+    setQStatus(esc('查询失败' + qFailLine(err) + '（保留上次结果）'), 'q-err');
+  });
+}
+
+/* 加入 / 移出观察池：成功后按钮就地翻转 + 刷新下方观察池表。
+   会改状态的 POST → tries:1（不重试），但照样走统一出口（非 JSON / 连不上都有人话原因） */
+function poolToggle(i, btn){
+  var p = lastQuery;
+  if(!p || !p.results || !p.results[i]) return;
+  var r = p.results[i];
+  if(!btn) btn = document.querySelector('.q-pool-btn[data-i="' + i + '"]');
+  var msg = btn ? btn.parentNode.querySelector('.q-pool-msg') : null;
+  if(!r.id){
+    if(msg){ msg.className = 'note-line q-err'; msg.textContent = '这条结果没有 id，无法写入观察池'; }
+    return;
+  }
+  var add = !r.in_watchlist;
+  if(btn){ btn.disabled = true; btn.textContent = add ? '加入中…' : '移出中…'; }
+  if(msg){ msg.textContent = ''; msg.className = 'note-line q-pool-msg'; }
+  fetchJSON(add ? '/api/watchlist/add' : '/api/watchlist/remove', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(add ? {id: r.id, symbol: r.symbol} : {id: r.id}),
+    tries: 1
+  }).then(function(j){
+    if(!j || j.ok !== true) throw new Error((j && j.error) || '写观察池失败');
+    r.in_watchlist = add;
+    renderQuery();
+    var m = document.querySelector('.q-pool-btn[data-i="' + i + '"]');
+    var m2 = m ? m.parentNode.querySelector('.q-pool-msg') : null;
+    if(m2){ m2.textContent = add ? '已加入观察池' : '已移出观察池'; }
+    loadAll();                               // 刷新观察池表（不动查询结果）
+  }).catch(function(err){
+    var b = document.querySelector('.q-pool-btn[data-i="' + i + '"]');
+    if(b){ b.disabled = false; b.textContent = add ? '加入观察池' : '移出观察池'; }
+    var mm = b ? b.parentNode.querySelector('.q-pool-msg') : null;
+    if(mm){ mm.className = 'note-line q-err'; mm.textContent = String((err && err.message) || err); }
+  });
+}
+
+/* ---------------------- 取数 ---------------------- */
+
+function setErr(on, msg){
+  var e = $('err');
+  if(on){ e.classList.add('on'); e.textContent = msg ? String(msg) : '数据读取失败'; }
+  else { e.classList.remove('on'); e.textContent = '数据读取失败'; }
+}
+
+var loading = false;
+/* 四个接口一起刷：data / brief / discount / deep；任何一个失败就保留上一次的渲染结果 */
+function loadAll(){
+  if(loading) return Promise.resolve();
+  loading = true;
+  return Promise.allSettled([
+    fetchJSON('/api/data'), fetchJSON('/api/brief'),
+    fetchJSON('/api/discount'), fetchJSON('/api/deep')
+  ]).then(function(rs){
+    var bad = false, i, why = null;
+    var fns = [renderData, renderBrief, renderDiscount, renderDeep];
+    var keys = ['data', 'brief', 'discount', 'deep'];
+    for(i=0;i<rs.length;i++){
+      if(rs[i].status === 'fulfilled'){ last[keys[i]] = rs[i].value; fns[i](rs[i].value); }
+      else { bad = true; if(!why){ why = rs[i].reason; } }
+    }
+    /* 四个接口都走统一出口（GET 3 次尝试）：横幅把「已重试几次 + 为什么」写清楚 */
+    setErr(bad, bad ? ('数据读取失败' + qFailLine(why)) : '');
+    loading = false;
+  }).catch(function(err){ setErr(true, '数据读取失败' + qFailLine(err)); loading = false; });
+}
+
+/* ---------------------- 重新采集 ---------------------- */
+var polling = null;
+function setBtn(disabled, label){ var b = $('btn'); b.disabled = !!disabled; b.textContent = label; }
+function setStatus(t){ $('status').textContent = t; }
+
+function stopPoll(){ if(polling){ clearInterval(polling); polling = null; } }
+
+function stageText(s){
+  var st = s && s.stage;
+  if(!st) return '';
+  return ' · ' + st.index + '/' + st.total + ' ' + (st.label || '');
+}
+
+function applyStatus(s){
+  if(!s) return;
+  var t = s.running
+    ? '采集中' + stageText(s) + '… 起于 ' + clock(s.started_at)
+    : '上次采集：' + (s.started_at ? clock(s.started_at) : '—')
+      + ' → ' + (typeof s.exit_code === 'number' ? 'exit ' + s.exit_code : '未跑过');
+  setStatus(t);
+}
+
+/* 轮询也走统一出口（3 次尝试）；上一次还没回来就先复用同一个 promise，别把请求越堆越多 */
+var pollInFlight = null;
+function pollOnce(){
+  if(pollInFlight){ return pollInFlight; }
+  pollInFlight = fetchJSON('/api/status').then(function(s){
+    pollInFlight = null;
+    applyStatus(s);
+    return s;
+  }, function(err){
+    pollInFlight = null;
+    throw err;
+  });
+  return pollInFlight;
+}
+
+function startPolling(){
+  stopPoll();
+  polling = setInterval(function(){
+    pollOnce().then(function(s){
+      if(!s.running){
+        stopPoll();
+        setBtn(false, '重新采集');
+        var code = s.exit_code;
+        return loadAll().then(function(){
+          setStatus('采集完成' + (typeof code === 'number' && code !== 0 ? '（exit ' + code + '）' : '') + ' · ' + clock(s.finished_at));
+        });
+      }
+    }).catch(function(){ /* 轮询失败继续试，保持按钮禁用 */ });
+  }, 3000);
+}
+
+function doRefresh(){
+  setBtn(true, '采集中…');
+  setStatus('正在启动采集…');
+  /* 会改状态的 POST → tries:1（不重试），但照样走统一出口（非 JSON / 连不上都有人话原因） */
+  fetchJSON('/api/refresh', {method:'POST', tries: 1}).then(function(){
+    setStatus('采集已启动…');
+    startPolling();
+  }).catch(function(err){
+    if(err && err.q_http === 409){ setStatus('已有一个采集在跑，继续等它'); startPolling(); return; }
+    setErr(true);
+    setBtn(false, '重新采集');
+    setStatus('启动失败');
+  });
+}
+
+/* ---------------------- 初始化 ---------------------- */
+$('btn').addEventListener('click', doRefresh);
+
+/* 点行展开/收起：只重画这一张表，展开状态记在 openKeys 里（30s 刷新后照样还原） */
+delegateRows($('deep-fund-body'), function(k){ toggleOpen(k); renderDeep(last.deep); });
+
+/* 查询：回车或点按钮都触发 */
+$('q-btn').addEventListener('click', doLookup);
+$('q-input').addEventListener('keydown', function(e){
+  if(e.key === 'Enter' || e.keyCode === 13){ e.preventDefault(); doLookup(); }
+});
+$('q-list').addEventListener('click', function(e){
+  var n = e.target;
+  while(n && n !== this && !(n.className && String(n.className).indexOf('q-pool-btn') >= 0)){ n = n.parentNode; }
+  if(n && n !== this && n.className && String(n.className).indexOf('q-pool-btn') >= 0){
+    poolToggle(parseInt(n.getAttribute('data-i'), 10), n);
+  }
+});
+/* 「算这个币的带血筹码」：只挂第 1 条，点了才起任务（每 3 秒轮询进度） */
+$('q-list').addEventListener('click', function(e){
+  var n = e.target;
+  while(n && n !== this && !(n.className && String(n.className).indexOf('cb-btn') >= 0)){ n = n.parentNode; }
+  if(n && n !== this && n.className && String(n.className).indexOf('cb-btn') >= 0){
+    cbStart(n.getAttribute('data-q') || '');
+  }
+});
+loadAll();
+pollOnce().then(function(s){ if(s.running){ setBtn(true, '采集中…'); startPolling(); } })
+          .catch(function(){});
+setInterval(loadAll, 30000);   // 只更新数据与文本，不动整页
+})();
+</script>
+</body>
+</html>

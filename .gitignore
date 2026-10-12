@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+oi_scan.json
+pump_study.json
+cg_cache.json
+*.log
+.venv/

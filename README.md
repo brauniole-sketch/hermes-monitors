@@ -9,6 +9,23 @@
 
 ![桌面视图](docs/desktop.png)
 
+## 本仓库里有两个面板
+
+| 面板 | 线上地址（GitHub Pages，固定） | 数据来源 |
+|---|---|---|
+| **币安合约 OI 观察列表**（本目录） | https://brauniole-sketch.github.io/hermes-monitors/ | `data` 分支 `oi_scan.json`，本机 cron 每 5 分钟扫一轮后推送 |
+| **带血筹码 · 监测面板**（`blood-chips/`） | https://brauniole-sketch.github.io/hermes-monitors/blood-chips/ | `data-bc` 分支 `bc_*.json`，本机 cron 每 30 分钟抓一次快照后推送 |
+
+**带血筹码那个是「只读快照」**：拉取方向照旧是本机 → GitHub（推数据**不会**触发 Pages 重新构建，
+所以不受「10 次/小时」构建限制）。因为 GitHub Pages 上没有服务器，
+**地址查询 / 算某个币的带血筹码 / 重新采集 / 观察池增删**这些需要本机后端的入口，
+在静态版里会统一提示「静态只读模式」，想看全部功能得在本机跑 `blood-chips/src/blood_chips_web.py`。
+
+带血筹码页面的实现方式：`blood-chips/index.html` 是个很小的启动器，它把 `panel.html`
+（**原始页面，未改动**）读进来、在 `<head>` 里插一个 `shim.js` 再 `document.write` 出来。
+`shim.js` 把页面里所有 `/api/*` 请求改写成读 `data-bc` 分支上的静态 JSON
+（读数据走 raw.githubusercontent.com，写操作直接回一条人话错误）。
+
 ## 看什么
 
 | 列 | 含义 |

@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>观察列表</title>
+<style>
+  :root {
+    --yellow-bg: #FDF6E3;
+    --yellow-fg: #B8860B;
+    --red-bg: #FDECEC;
+    --red-fg: #C0392B;
+    --gray-bg: #F2F2F2;
+    --gray-fg: #888;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #fafafa;
+    color: #222;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 16px 48px;
+  }
+  .panel {
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  h1 {
+    font-size: 21px;
+    font-weight: 700;
+    color: #111;
+    margin: 0;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #999;
+    margin: 4px 0 0;
+  }
+  .stale {
+    font-size: 13px;
+    color: #d97706;
+    margin: 6px 0 0;
+  }
+  button.refresh {
+    font-family: inherit;
+    font-size: 14px;
+    color: #333;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  button.refresh:hover:not(:disabled) { background: #f7f7f7; border-color: #ccc; }
+  button.refresh:disabled { color: #bbb; cursor: default; background: #fafafa; }
+  .meta {
+    font-size: 13px;
+    color: #999;
+    margin: 10px 0 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .search {
+    display: block;
+    width: 100%;
+    font-family: inherit;
+    font-size: 16px;
+    color: #222;
+    background: #fff;
+    border: 1px solid #e2e2e2;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 14px 0 0;
+    outline: none;
+  }
+  .search:focus { border-color: #bbb; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0 0;
+  }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tab {
+    font-family: inherit;
+    font-size: 14px;
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 1px solid #f5f5f5;
+    background: #f5f5f5;
+    color: #666;
+    cursor: pointer;
+  }
+  .tab.active {
+    background: #fff;
+    color: #111;
+    border-color: #e0e0e0;
+  }
+  select.sort {
+    font-family: inherit;
+    font-size: 14px;
+    color: #333;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    margin-left: auto;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  .muted { color: #999; }
+  .pos { color: #16a34a; }
+  .neg { color: #dc2626; }
+  .zero { color: #999; }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 13px;
+    margin-left: 6px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .pill:first-child { margin-left: 0; }
+  .pill.yellow { background: var(--yellow-bg); color: var(--yellow-fg); }
+  .pill.red { background: var(--red-bg); color: var(--red-fg); }
+  .pill.gray { background: var(--gray-bg); color: var(--gray-fg); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+  }
+  thead th {
+    font-size: 14px;
+    font-weight: 600;
+    color: #999;
+    text-align: left;
+    padding: 10px 8px;
+    border-bottom: 1px solid #e8e8e8;
+    white-space: nowrap;
+  }
+  tbody tr.row {
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+  }
+  tbody tr.row > td {
+    height: 88px;
+    padding: 8px;
+    font-size: 15px;
+    color: #222;
+    vertical-align: middle;
+  }
+  .sym { font-size: 17px; font-weight: 700; color: #111; }
+  .name { font-size: 13px; color: #999; margin-top: 2px; }
+  .boldnum { font-weight: 700; }
+  .detail > td {
+    padding: 0 8px 16px;
+    background: #fff;
+  }
+  .detail-box {
+    background: #fafafa;
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 6px 18px;
+  }
+  .detail-item { font-size: 13px; color: #444; font-variant-numeric: tabular-nums; }
+  .detail-item .k { color: #999; }
+  .detail-note { font-size: 12px; color: #999; margin-top: 10px; }
+
+  .mobile { display: none; }
+  .nodata { color: #999; font-size: 14px; padding: 24px 8px; text-align: center; }
+
+  @media (max-width: 719px) {
+    table { display: none; }
+    .mobile { display: block; margin-top: 12px; }
+    .mcell {
+      border-bottom: 1px solid #f0f0f0;
+      background: #fff;
+      padding: 14px 12px;
+      cursor: pointer;
+    }
+    .mcell:first-child { border-top: 1px solid #f0f0f0; }
+    .m-top {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .m-top .sym { font-size: 17px; }
+    .m-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+      margin-top: 10px;
+    }
+    .m-kv { font-size: 14px; color: #222; font-variant-numeric: tabular-nums; }
+    .m-kv .k { color: #999; font-size: 13px; margin-right: 6px; }
+    .m-big {
+      display: flex;
+      gap: 24px;
+      margin-top: 12px;
+    }
+    .m-big .b-k { font-size: 12px; color: #999; }
+    .m-big .b-v { font-size: 17px; font-weight: 700; color: #111; font-variant-numeric: tabular-nums; }
+    .m-pills { margin-top: 10px; }
+  }
+  /* 列宽 / 换行修正：数字列不许折行，OI 那列不再断成两行 */
+  thead th, tbody tr.row > td { white-space: nowrap; }
+  tbody tr.row > td:first-child, thead th:first-child { white-space: normal; }
+  @media (min-width: 720px) {
+    thead th, tbody tr.row > td { padding-left: 8px; padding-right: 8px; font-size: 14px; }
+    tbody tr.row > td:first-child { font-size: 17px; }
+    thead th:nth-child(1), tbody tr.row > td:nth-child(1) { width: 13%; }
+    thead th:nth-child(2), tbody tr.row > td:nth-child(2) { width: 11%; }
+    thead th:nth-child(3), tbody tr.row > td:nth-child(3) { width: 13%; }
+    thead th:nth-child(4), tbody tr.row > td:nth-child(4) { width: 13%; }
+    thead th:nth-child(5), tbody tr.row > td:nth-child(5) { width: 10%; }
+    thead th:nth-child(6), tbody tr.row > td:nth-child(6) { width: 10%; }
+    thead th:nth-child(7), tbody tr.row > td:nth-child(7) { width: 9%; }
+    thead th:nth-child(8), tbody tr.row > td:nth-child(8) { width: 9%; }
+    thead th:nth-child(9), tbody tr.row > td:nth-child(9) { width: 12%; }
+  }
+  .score { font-size: 20px; font-weight: 700; }
+  .sc-red { color: #C0392B; }
+  .sc-orange { color: #D97706; }
+  .sc-amber { color: #B8860B; }
+  .sc-gray { color: #999; }
+  /* 行高与标签列对齐修正：让每行等高、标签不折行、单元格垂直居中 */
+  tbody tr.row { height: 88px; }
+  tbody tr.row > td { vertical-align: middle; }
+  thead th:last-child, tbody tr.row > td:last-child { min-width: 170px; white-space: normal; }
+  tbody tr.row > td:nth-child(11) { min-width: 170px; }
+  .m-top { display: flex; align-items: baseline; gap: 8px; }
+  .m-score { margin-left: auto; white-space: nowrap; }
+  .m-score-k { font-size: 12px; color: #999; margin-right: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <div class="title-row">
+      <div>
+        <h1>观察列表</h1>
+        <p class="subtitle">点击行查看详情 · 黄色标签为异动提醒</p>
+        <p class="stale" id="stale" style="display:none"></p>
+      </div>
+      <button class="refresh" id="refreshBtn">刷新</button>
+    </div>
+    <p class="meta" id="meta"></p>
+    <input class="search" id="search" type="text" placeholder="搜索 symbol / base / name">
+    <div class="controls">
+      <div class="tabs">
+        <button class="tab active" data-tab="all">全部</button>
+        <button class="tab" data-tab="oigtfdv">OI&gt;FDV</button>
+        <button class="tab" data-tab="volgt1">量放大&gt;1</button>
+        <button class="tab" data-tab="topoifdv">OI/FDV 最高</button>
+      </div>
+      <select class="sort" id="sortSel">
+        <option value="score">前兆分</option>
+        <option value="oi_over_fdv">OI/FDV</option>
+        <option value="vol_over_mcap">量/市值</option>
+        <option value="oi_usd">OI</option>
+        <option value="oi_chg_1h">1h OI 变化</option>
+      </select>
+    </div>
+
+    <div id="content"></div>
+
+    <p class="detail-note" id="footnote">OI = 币安 futures/data/openInterestHist 的 sumOpenInterestValue（美元名义，5 分钟粒度）；FDV/市值 = CoinGecko coins/markets；缺失表示没匹配上，不代表为 0。单位：美元 USD</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var state = {
+    data: null,
+    tab: "all",
+    sort: "score",
+    query: "",
+    expanded: {},
+    refreshing: false,
+    pollTimer: null
+  };
+
+  var els = {
+    meta: document.getElementById("meta"),
+    stale: document.getElementById("stale"),
+    search: document.getElementById("search"),
+    content: document.getElementById("content"),
+    refreshBtn: document.getElementById("refreshBtn"),
+    sortSel: document.getElementById("sortSel"),
+    footnote: document.getElementById("footnote")
+  };
+
+  function isNum(v) {
+    return typeof v === "number" && isFinite(v);
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function fmtAmount(v) {
+    if (!isNum(v)) return null;
+    var abs = Math.abs(v);
+    if (abs >= 1e8) return "$" + (v / 1e8).toFixed(2) + "亿";
+    if (abs >= 1e4) return "$" + (v / 1e4).toFixed(2) + "万";
+    return "$" + v.toFixed(2);
+  }
+
+  function amountCell(v) {
+    var s = fmtAmount(v);
+    if (s === null) return '<span class="muted">--</span>';
+    return '<span class="num">' + esc(s) + "</span>";
+  }
+
+  function fmtPrice(v) {
+    if (!isNum(v)) return null;
+    if (v === 0) return "0";
+    if (Math.abs(v) < 1) {
+      return Number(v.toPrecision(6)).toString();
+    }
+    return v.toFixed(3);
+  }
+
+  function priceCell(v) {
+    var s = fmtPrice(v);
+    if (s === null) return '<span class="muted">--</span>';
+    return '<span class="num">' + esc(s) + "</span>";
+  }
+
+  function pctClass(v) {
+    if (!isNum(v) || v === 0) return "zero";
+    return v > 0 ? "pos" : "neg";
+  }
+
+  function pctCell(v, decimals) {
+    if (!isNum(v)) return '<span class="muted">--</span>';
+    var val = v * 100;
+    var s = (val >= 0 ? "+" : "") + val.toFixed(decimals) + "%";
+    return '<span class="num ' + pctClass(val) + '">' + esc(s) + "</span>";
+  }
+
+  function changeCell(v) {
+    if (!isNum(v)) return '<span class="muted">--</span>';
+    var s = (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
+    return '<span class="num ' + pctClass(v) + '">' + esc(s) + "</span>";
+  }
+
+  function fmtRatio(v) {
+    if (!isNum(v)) return null;
+    return v.toFixed(2);
+  }
+
+  function ratioCell(v) {
+    var s = fmtRatio(v);
+    if (s === null) return '<span class="muted">--</span>';
+    return '<span class="num boldnum">' + esc(s) + "</span>";
+  }
+
+  function volRatioCell(v) {
+    if (!isNum(v)) return '<span class="muted">--</span>';
+    return '<span class="num boldnum">' + esc(v.toFixed(2)) + "×</span>";
+  }
+
+  function volxCell(row) {
+    if (!isNum(row.vol_x_1h)) return '<span class="muted">--</span>';
+    var v = row.vol_x_1h;
+    return v >= 3
+      ? '<span class="num boldnum sc-red">' + esc(v.toFixed(2)) + "×</span>"
+      : '<span class="num boldnum">' + esc(v.toFixed(2)) + "×</span>";
+  }
+
+  function scoreCell(row) {
+    if (!isNum(row.score)) return '<span class="muted">--</span>';
+    var s = row.score;
+    var cls = s >= 70 ? "sc-red" : s >= 55 ? "sc-orange" : s >= 40 ? "sc-amber" : "sc-gray";
+    return '<span class="score ' + cls + '">' + s + "</span>";
+  }
+
+  function baseSymbol(row) {
+    if (row && row.base) return row.base;
+    if (row && typeof row.symbol === "string") return row.symbol.replace(/USDT$/, "");
+    return null;
+  }
+
+  function symbolCell(row) {
+    var b = baseSymbol(row);
+    var sym = b === null || b === "" ? "--" : b;
+    var symHtml = b ? '<div class="sym">' + esc(sym) + "</div>" : '<div class="sym muted">--</div>';
+    var nameHtml = '<div class="name">' + (row && row.name ? esc(row.name) : "--") + "</div>";
+    return symHtml + nameHtml;
+  }
+
+  function pills(row) {
+    var out = [];
+    if (row.match_kind === "missing") {
+      out.push('<span class="pill gray">未匹配</span>');
+    }
+    if (row.oi_gt_fdv === true) {
+      out.push('<span class="pill yellow">OI &gt; FDV</span>');
+    }
+    if (isNum(row.vol_over_mcap)) {
+      var x = row.vol_over_mcap;
+      if (x >= 3) {
+        out.push('<span class="pill red">量放大 ×' + esc(x.toFixed(1)) + "</span>");
+      } else if (x >= 1) {
+        out.push('<span class="pill yellow">量放大 ×' + esc(x.toFixed(1)) + "</span>");
+      }
+    }
+    if (isNum(row.vol_x_1h)) {
+      var vx = row.vol_x_1h;
+      if (vx >= 3) {
+        out.push('<span class="pill red">量能 ×' + esc(vx.toFixed(1)) + "</span>");
+      } else if (vx >= 1.5) {
+        out.push('<span class="pill yellow">量能 ×' + esc(vx.toFixed(1)) + "</span>");
+      }
+    }
+    if (isNum(row.funding_rate) && row.funding_rate < 0) {
+      out.push('<span class="pill yellow">费率负</span>');
+    }
+    if (isNum(row.oi_chg_1h) && Math.abs(row.oi_chg_1h) >= 0.05) {
+      out.push('<span class="pill red">OI 1h 异动</span>');
+    }
+    return out.join("");
+  }
+
+  function matchFilter(row) {
+    if (state.tab === "oigtfdv") return row.oi_gt_fdv === true;
+    if (state.tab === "volgt1") return isNum(row.vol_over_mcap) && row.vol_over_mcap > 1;
+    return true;
+  }
+
+  function matchQuery(row) {
+    if (!state.query) return true;
+    var q = state.query.toLowerCase();
+    var fields = [row.symbol, row.base, row.name];
+    for (var i = 0; i < fields.length; i++) {
+      if (fields[i] && String(fields[i]).toLowerCase().indexOf(q) !== -1) return true;
+    }
+    return false;
+  }
+
+  function sortRows(rows) {
+    var key = state.sort;
+    var copy = rows.slice();
+    var descending = key !== "oi_chg_1h";
+    copy.sort(function (a, b) {
+      var av = a[key];
+      var bv = b[key];
+      var aN = isNum(av);
+      var bN = isNum(bv);
+      if (!aN && !bN) return 0;
+      if (!aN) return 1;
+      if (!bN) return -1;
+      return descending ? bv - av : av - bv;
+    });
+    return copy;
+  }
+
+  function renderTable(rows) {
+    var head = "<thead><tr>" +
+      "<th>代币</th><th>价格</th><th>OI</th><th>24h量</th>" +
+      "<th>费率</th><th>1h OI</th><th>量能倍数</th><th>OI/FDV</th><th>量/市值</th><th>判断</th><th>异动</th>" +
+      "</tr></thead>";
+    var body = "<tbody>";
+    rows.forEach(function (row, idx) {
+      var key = row.symbol || row.base || String(idx);
+      body += '<tr class="row" data-key="' + esc(key) + '">' +
+        "<td>" + symbolCell(row) + "</td>" +
+        '<td class="num">' + priceCell(row.price) + "</td>" +
+        "<td>" + amountCell(row.oi_usd) + "</td>" +
+        "<td>" + amountCell(row.vol24h_usd) + "</td>" +
+        '<td class="num">' + pctCell(row.funding_rate, 4) + "</td>" +
+        '<td class="num">' + pctCell(row.oi_chg_1h, 2) + "</td>" +
+        "<td>" + volxCell(row) + "</td>" +
+        "<td>" + ratioCell(row.oi_over_fdv) + "</td>" +
+        "<td>" + volRatioCell(row.vol_over_mcap) + "</td>" +
+        "<td>" + scoreCell(row) + "</td>" +
+        "<td>" + (pills(row) || '<span class="muted">--</span>') + "</td>" +
+        "</tr>";
+      if (state.expanded[key] && state.byKey[key]) {
+        body += detailRow(state.byKey[key]);
+      }
+    });
+    body += "</tbody>";
+    return '<table class="desktop-table">' + head + body + "</table>";
+  }
+
+  function renderMobile(rows) {
+    var html = '<div class="mobile">';
+    rows.forEach(function (row, idx) {
+      var key = row.symbol || row.base || String(idx);
+      html += '<div class="mcell" data-key="' + esc(key) + '">' +
+        '<div class="m-top"><span class="sym">' + esc(baseSymbol(row) || "--") + "</span>" +
+        '<span class="num">' + priceCell(row.price) + "</span>" +
+        changeCell(row.change_pct) +
+        '<span class="m-score"><span class="m-score-k">评分</span>' + scoreCell(row) + "</span></div>" +
+        '<div class="m-grid">' +
+        '<div class="m-kv"><span class="k">OI</span>' + amountCell(row.oi_usd) + "</div>" +
+        '<div class="m-kv"><span class="k">24h量</span>' + amountCell(row.vol24h_usd) + "</div>" +
+        '<div class="m-kv"><span class="k">费率</span>' + pctCell(row.funding_rate, 4) + "</div>" +
+        '<div class="m-kv"><span class="k">1h OI</span>' + pctCell(row.oi_chg_1h, 2) + "</div>" +
+        '<div class="m-kv"><span class="k">量能倍数</span>' + volxCell(row) + "</div>" +
+        "</div>" +
+        '<div class="m-big">' +
+        '<div><div class="b-k">OI/FDV</div><div class="b-v">' + (fmtRatio(row.oi_over_fdv) === null ? '<span class="muted">--</span>' : esc(fmtRatio(row.oi_over_fdv))) + "</div></div>" +
+        '<div><div class="b-k">量/市值</div><div class="b-v">' + (isNum(row.vol_over_mcap) ? esc(row.vol_over_mcap.toFixed(2)) + "×" : '<span class="muted">--</span>') + "</div></div>" +
+        "</div>" +
+        '<div class="m-pills">' + (pills(row) || "") + "</div>";
+      if (state.expanded[key] && state.byKey[key]) {
+        html += detailBlock(state.byKey[key]);
+      }
+      html += "</div>";
+    });
+    html += "</div>";
+    return html;
+  }
+
+  function detailBlock(row) {
+    var sc = isNum(row.score) ? String(row.score) : "--";
+    var lines = ['评分 ' + esc(sc) + '｜量能倍数 35% · 1h OI 30% · 费率 20% · OI÷FDV 15%'];
+    var parts = row.score_parts || {};
+    ["vol_x", "oi", "funding", "lev"].forEach(function (k) {
+      var v = parts[k];
+      lines.push(k + ': ' + (isNum(v) ? String(v) : "--"));
+    });
+    return '<div class="detail-box">' + lines.join("<br>") + detailInner(row) + "</div>";
+  }
+
+  function detailRow(row) {
+    return '<tr class="detail"><td colspan="11">' + detailBlock(row) + "</td></tr>";
+  }
+
+  function detailInner(row) {
+    var keys = Object.keys(row);
+    var html = '<div class="detail-grid">';
+    keys.forEach(function (k) {
+      var v = row[k];
+      var display;
+      if (v === null || v === undefined) display = "--";
+      else if (typeof v === "object") display = JSON.stringify(v);
+      else display = String(v);
+      html += '<div class="detail-item"><span class="k">' + esc(k) + "</span> " + esc(display) + "</div>";
+    });
+    html += "</div>";
+    html += '<div class="detail-note">OI=币安 openInterestHist.sumOpenInterestValue；FDV/市值=CoinGecko；单位 USD</div>';
+    return html;
+  }
+
+  function renderMeta() {
+    var d = state.data;
+    if (!d) return;
+    var counts = d.counts || {};
+    var t = d.generated_at ? new Date(d.generated_at) : new Date();
+    var hh = String(t.getHours()).padStart(2, "0");
+    var mm = String(t.getMinutes()).padStart(2, "0");
+    var ss = String(t.getSeconds()).padStart(2, "0");
+    els.meta.textContent = "更新 " + hh + ":" + mm + ":" + ss + " · " +
+      (counts.crypto_symbols != null ? counts.crypto_symbols : "--") + " 币 / 匹配 " +
+      (counts.matched != null ? counts.matched : "--") + " / OI>FDV " +
+      (counts.oi_gt_fdv != null ? counts.oi_gt_fdv : "--") + " / 量放大 " +
+      (counts.vol_over_mcap_gt1 != null ? counts.vol_over_mcap_gt1 : "--");
+
+    var stale = d.stale_sec;
+    if (isNum(stale) && stale > 600) {
+      els.stale.style.display = "";
+      els.stale.textContent = "数据 " + Math.round(stale / 60) + " 分钟前，点刷新";
+    } else {
+      els.stale.style.display = "none";
+    }
+  }
+
+  function render() {
+    var d = state.data;
+    if (!d || d.ok === false || !Array.isArray(d.rows)) {
+      els.content.innerHTML = '<div class="nodata">暂无数据</div>';
+      return;
+    }
+    state.byKey = {};
+    d.rows.forEach(function (row, i) {
+      var key = row.symbol || row.base || String(i);
+      if (!(key in state.byKey)) state.byKey[key] = row;
+    });
+    var rows = d.rows.filter(matchFilter).filter(matchQuery);
+    if (state.tab === "topoifdv") {
+      rows = rows.slice().sort(function (a, b) {
+        var an = isNum(a.oi_over_fdv), bn = isNum(b.oi_over_fdv);
+        if (!an && !bn) return 0;
+        if (!an) return 1;
+        if (!bn) return -1;
+        return b.oi_over_fdv - a.oi_over_fdv;
+      });
+    } else {
+      rows = sortRows(rows);
+    }
+    if (!rows.length) {
+      els.content.innerHTML = '<div class="nodata">暂无数据</div>';
+      return;
+    }
+    els.content.innerHTML = renderTable(rows) + renderMobile(rows);
+  }
+
+  function renderAll() {
+    renderMeta();
+    render();
+  }
+
+  function bindContent() {
+    els.content.addEventListener("click", function (ev) {
+      var el = ev.target.closest("[data-key]");
+      if (!el) return;
+      var key = el.getAttribute("data-key");
+      if (!key) return;
+      state.expanded[key] = !state.expanded[key];
+      render();
+    });
+  }
+
+  var STATIC_DATA_URL = "https://raw.githubusercontent.com/brauniole-sketch/hermes-monitors/data/oi_scan.json";
+
+  function normalizeScan(json) {
+    if (!json) return null;
+    if (json.ok === undefined && Array.isArray(json.rows)) {
+      json.ok = true;
+      json.static = true;
+      json.refreshing = false;
+      if (json.stale_sec === undefined && json.generated_at) {
+        json.stale_sec = Math.max(0, Math.round((Date.now() - Date.parse(json.generated_at)) / 1000));
+      }
+    }
+    return json;
+  }
+
+  function fetchScan() {
+    function getJson(url, opts) {
+      return fetch(url, opts).then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      });
+    }
+    function apply(json) {
+      state.data = normalizeScan(json) || { ok: false, rows: [] };
+      if (state.data.static && els.refreshBtn) els.refreshBtn.style.display = "none";
+      renderAll();
+      return state.data;
+    }
+    return getJson("/api/scan", { headers: { "Accept": "application/json" } })
+      .catch(function () {
+        return getJson(STATIC_DATA_URL, { headers: { "Accept": "application/json" }, cache: "no-store" });
+      })
+      .then(apply)
+      .catch(function () { return apply({ ok: false, rows: [] }); });
+  }
+
+  function poll() {
+    if (state.pollTimer) clearTimeout(state.pollTimer);
+    fetchScan().then(function (json) {
+      if (json && json.refreshing) {
+        state.pollTimer = setTimeout(poll, 5000);
+      } else {
+        state.pollTimer = null;
+      }
+    });
+  }
+
+  function onRefresh() {
+    els.refreshBtn.disabled = true;
+    setTimeout(function () { els.refreshBtn.disabled = false; }, 3000);
+    fetch("/api/refresh", { method: "POST" })
+      .catch(function () {})
+      .then(function () { poll(); });
+  }
+
+  els.refreshBtn.addEventListener("click", onRefresh);
+
+  els.search.addEventListener("input", function () {
+    state.query = els.search.value.trim();
+    render();
+  });
+
+  els.sortSel.addEventListener("change", function () {
+    state.sort = els.sortSel.value;
+    render();
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (btn) {
+    btn.addEventListener("click", function () {
+      Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (b) {
+        b.classList.remove("active");
+      });
+      btn.classList.add("active");
+      state.tab = btn.getAttribute("data-tab");
+      render();
+    });
+  });
+
+  bindContent();
+  fetchScan().then(function (json) {
+    if (json && json.refreshing) poll();
+  });
+})();
+</script>
+</body>
+</html>

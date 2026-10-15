@@ -597,7 +597,8 @@
     var stale = d.stale_sec;
     if (isNum(stale) && stale > 600) {
       els.stale.style.display = "";
-      els.stale.textContent = "数据 " + Math.round(stale / 60) + " 分钟前，点刷新";
+      els.stale.textContent = "数据 " + Math.round(stale / 60) + " 分钟前"
+        + (d.static ? "（每 5 分钟自动更新）" : "，点刷新");
     } else {
       els.stale.style.display = "none";
     }
@@ -679,7 +680,8 @@
     }
     return getJson("/api/scan", { headers: { "Accept": "application/json" } })
       .catch(function () {
-        return getJson(STATIC_DATA_URL, { headers: { "Accept": "application/json" }, cache: "no-store" });
+        return getJson(STATIC_DATA_URL + "?t=" + Date.now(),
+                       { headers: { "Accept": "application/json" }, cache: "no-store" });
       })
       .then(apply)
       .catch(function () { return apply({ ok: false, rows: [] }); });
@@ -731,6 +733,8 @@
   fetchScan().then(function (json) {
     if (json && json.refreshing) poll();
   });
+  /* 每 60 秒自动重取一次（静态模式带 ?t= 破 raw.githubusercontent 的 5 分钟 CDN 缓存） */
+  setInterval(fetchScan, 60000);
 })();
 </script>
 </body>
